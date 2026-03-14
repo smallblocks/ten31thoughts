@@ -1,0 +1,16 @@
+.git
+.github
+__pycache__
+*.py[cod]
+*.s9pk
+image.tar
+docker-images/
+data/
+.env
+.venv
+venv
+frontend/node_modules
+*.md
+!INSTRUCTIONS.md
+LICENSE
+Makefile
