@@ -21,13 +21,6 @@ jobs:
       - name: Prepare StartOS SDK
         uses: Start9Labs/sdk@v1
 
-      - name: Install newer start-cli
-        run: |
-          # Download newer start-cli with s9pk subcommand
-          wget -qO /usr/local/bin/start-cli https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
-          chmod +x /usr/local/bin/start-cli
-          start-cli --version || true
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -36,8 +29,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install newer start-cli
+        run: |
+          # Download and install newer start-cli with s9pk subcommand
+          mkdir -p $HOME/bin
+          wget -qO $HOME/bin/start-cli https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
+          chmod +x $HOME/bin/start-cli
+          echo "$HOME/bin" >> $GITHUB_PATH
+          $HOME/bin/start-cli --version
+
       - name: Build x86_64 package
-        run: make x86
+        run: |
+          export PATH="$HOME/bin:$PATH"
+          make x86
 
       - name: Upload .s9pk artifact
         uses: actions/upload-artifact@v4
