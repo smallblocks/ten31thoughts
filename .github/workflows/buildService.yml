@@ -20,10 +20,8 @@ jobs:
 
       - name: Install StartOS CLI
         run: |
-          # Install start-cli for V2 s9pk packaging
-          wget -qO /tmp/start-cli.tar.gz https://github.com/Start9Labs/start-os/releases/latest/download/start-cli-linux-x86_64.tar.gz || \
-          wget -qO /tmp/start-cli.tar.gz https://github.com/Start9Labs/start-os/releases/download/v0.3.6-alpha.6/start-cli-linux-x86_64.tar.gz
-          tar -xzf /tmp/start-cli.tar.gz -C /usr/local/bin/ || tar -xzf /tmp/start-cli.tar.gz -C /tmp && mv /tmp/start-cli /usr/local/bin/
+          # Install start-cli for V2 s9pk packaging (StartOS 0.4+)
+          wget -qO /usr/local/bin/start-cli https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
           chmod +x /usr/local/bin/start-cli
           start-cli --version || echo "start-cli installed"
           # Initialize developer key for signing
