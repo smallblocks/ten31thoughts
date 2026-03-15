@@ -1,12 +1,21 @@
-name: Build Service
+name: Build Service
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths-ignore: ["*.md"]
+  workflow_run:
+    workflows: ["Build Docker Image"]
+    types: [completed]
     branches: ["master", "main"]
   push:
-    paths-ignore: ["*.md"]
+    paths:
+      - "startos/**"
+      - "package.json"
+      - "tsconfig.json"
+      - "Makefile"
+      - "s9pk.mk"
+      - "assets/**"
+      - "icon.*"
+      - "LICENSE"
     branches: ["master", "main"]
 
 concurrency:
@@ -15,7 +24,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.event.pull_request.draft == false
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     uses: start9labs/shared-workflows/.github/workflows/buildService.yml@master
     secrets:
       DEV_KEY: ${{ secrets.DEV_KEY }}

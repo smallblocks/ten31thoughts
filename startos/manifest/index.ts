@@ -1,4 +1,5 @@
-import { setupManifest } from '@start9labs/start-sdk'
+
+import { setupManifest } from '@start9labs/start-sdk'
 import { short, long } from './i18n'
 
 export const manifest = setupManifest({
@@ -15,7 +16,7 @@ export const manifest = setupManifest({
   images: {
     main: {
       source: {
-        dockerBuild: {},
+        dockerTag: 'ghcr.io/smallblocks/tenthoughts:latest',
       },
       arch: ['x86_64', 'aarch64'],
     },
