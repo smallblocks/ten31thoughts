@@ -1,18 +1,16 @@
-{
+{
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
+    "target": "ESNext",
+    "module": "CommonJS",
     "moduleResolution": "node",
+    "lib": ["ESNext"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
+    "outDir": "./dist",
+    "rootDir": "./startos",
     "declaration": true,
-    "outDir": "./javascript",
-    "rootDir": "./startos"
+    "resolveJsonModule": true
   },
-  "include": ["startos/**/*"],
-  "exclude": ["node_modules", "javascript"]
+  "include": ["startos/**/*"]
 }

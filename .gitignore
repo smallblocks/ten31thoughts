@@ -1,28 +1,6 @@
-# Dependencies
-node_modules/
-
-# Build outputs
-images/
+node_modules/
 javascript/
+dist/
+docker-images/
 *.s9pk
-
-# Environment
-.env
-.env.local
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-*.egg-info/
-
-# Misc
-.DS_Store
-Thumbs.db
-package-lock.json
+.startos/

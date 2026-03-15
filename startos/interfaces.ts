@@ -1,4 +1,4 @@
-import { i18n } from './i18n'
+import { i18n } from './i18n'
 import { sdk } from './sdk'
 import { uiPort } from './utils'
 
@@ -7,10 +7,13 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   const uiMultiOrigin = await uiMulti.bindPort(uiPort, {
     protocol: 'http',
   })
+
   const ui = sdk.createInterface(effects, {
-    name: i18n('Web UI'),
+    name: i18n('Web Interface'),
     id: 'ui',
-    description: i18n('The Ten31 Thoughts web interface'),
+    description: i18n(
+      'The main web interface for Ten31 Thoughts dashboard and chat',
+    ),
     type: 'ui',
     masked: false,
     schemeOverride: null,
@@ -20,6 +23,5 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   })
 
   const uiReceipt = await uiMultiOrigin.export([ui])
-
   return [uiReceipt]
 })

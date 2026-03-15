@@ -1,4 +1,4 @@
-import { sdk } from '../sdk'
+import { sdk } from '../sdk'
 import { setDependencies } from '../dependencies'
 import { setInterfaces } from '../interfaces'
 import { versionGraph } from '../install/versionGraph'

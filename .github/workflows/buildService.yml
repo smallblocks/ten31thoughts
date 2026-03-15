@@ -1,54 +1,21 @@
-name: Build Service
+name: Build Service
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
   pull_request:
-    branches:
-      - main
+    paths-ignore: ["*.md"]
+    branches: ["master", "main"]
+  push:
+    paths-ignore: ["*.md"]
+    branches: ["master", "main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Prepare StartOS SDK
-        uses: Start9Labs/sdk@v1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install newer start-cli
-        run: |
-          mkdir -p $HOME/bin
-          wget -qO $HOME/bin/start-cli https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
-          chmod +x $HOME/bin/start-cli
-          echo "$HOME/bin" >> $GITHUB_PATH
-
-      - name: Install dependencies and build SDK
-        run: |
-          npm ci || npm install
-          npm run build
-          ls -la javascript/
-
-      - name: Build x86_64 package
-        run: |
-          export PATH="$HOME/bin:$PATH"
-          make x86
-
-      - name: Upload .s9pk artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tenthoughts.s9pk
-          path: tenthoughts*.s9pk
+    if: github.event.pull_request.draft == false
+    uses: start9labs/shared-workflows/.github/workflows/buildService.yml@master
+    secrets:
+      DEV_KEY: ${{ secrets.DEV_KEY }}

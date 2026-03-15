@@ -1,3 +1,3 @@
-import { sdk } from '../sdk'
+import { sdk } from '../sdk'
 
 export const actions = sdk.Actions.of()
