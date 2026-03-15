@@ -93,4 +93,6 @@ backup:
     mounts:
       BACKUP: /mnt/backup
       main: /root/data
-migrations: {}
+migrations:
+  from: {}
+  to: {}
