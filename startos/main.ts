@@ -43,7 +43,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       fn: () =>
         sdk.healthCheck.checkPortListening(effects, uiPort, {
           successMessage: i18n('Ten31 Thoughts is ready'),
-          errorMessage: i18n('Ten31 Thoughts is not ready'),
+          errorMessage: i18n('Ten31 Thoughts is not responding'),
         }),
     },
     requires: [],

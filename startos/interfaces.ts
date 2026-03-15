@@ -1,4 +1,4 @@
-import { i18n } from './i18n'
+import { i18n } from './i18n'
 import { sdk } from './sdk'
 import { uiPort } from './utils'
 
@@ -9,11 +9,9 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   })
 
   const ui = sdk.createInterface(effects, {
-    name: i18n('Web Interface'),
+    name: i18n('Web UI'),
     id: 'ui',
-    description: i18n(
-      'The main web interface for Ten31 Thoughts dashboard and chat',
-    ),
+    description: i18n('The Ten31 Thoughts web interface'),
     type: 'ui',
     masked: false,
     schemeOverride: null,

@@ -1,3 +1,3 @@
-// Add translations for other locales here
-// Example:
-// export const es_ES = { 'Web Interface': 'Interfaz Web' }
+import { LangDict } from './default'
+
+export default {} satisfies Record<string, LangDict>
