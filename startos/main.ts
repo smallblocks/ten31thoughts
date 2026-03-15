@@ -1,46 +1,9 @@
-import { i18n } from './i18n'
+import { i18n } from './i18n'
 import { sdk } from './sdk'
 import { uiPort } from './utils'
-import { storeJson } from './fileModels/store.json'
 
 export const main = sdk.setupMain(async ({ effects }) => {
   console.info(i18n('Starting Ten31 Thoughts!'))
-
-  // Read LLM config from store — reactive: restarts daemon if config changes
-  const store = await storeJson.read().const(effects)
-
-  // Build env vars from stored config
-  const llmEnv: Record<string, string> = {
-    PYTHONUNBUFFERED: '1',
-    PYTHONPATH: '/app',
-    DATABASE_URL: 'sqlite:////data/ten31thoughts.db',
-    CHROMADB_PERSIST_DIR: '/data/chromadb',
-  }
-
-  // Set API keys based on provider
-  if (store.anthropicApiKey) {
-    llmEnv.ANTHROPIC_API_KEY = store.anthropicApiKey
-  }
-  if (store.openaiApiKey) {
-    llmEnv.OPENAI_API_KEY = store.openaiApiKey
-  }
-  if (store.ollamaBaseUrl) {
-    llmEnv.OLLAMA_BASE_URL = store.ollamaBaseUrl
-  }
-
-  // Set model preferences
-  if (store.analysisModel) {
-    llmEnv.TEN31_LLM_ANALYSIS_MODEL = store.analysisModel
-  }
-  if (store.synthesisModel) {
-    llmEnv.TEN31_LLM_SYNTHESIS_MODEL = store.synthesisModel
-  }
-  if (store.chatModel) {
-    llmEnv.TEN31_LLM_CHAT_MODEL = store.chatModel
-  }
-  if (store.embeddingModel) {
-    llmEnv.TEN31_LLM_EMBEDDING_MODEL = store.embeddingModel
-  }
 
   // Create subcontainer from the main image with the data volume mounted
   const subcontainer = await sdk.SubContainer.of(
@@ -68,14 +31,19 @@ export const main = sdk.setupMain(async ({ effects }) => {
         '--workers',
         '1',
       ],
-      env: llmEnv,
+      env: {
+        PYTHONUNBUFFERED: '1',
+        PYTHONPATH: '/app',
+        DATABASE_URL: 'sqlite:////data/ten31thoughts.db',
+        CHROMADB_PERSIST_DIR: '/data/chromadb',
+      },
     },
     ready: {
       display: i18n('Web Interface'),
       fn: () =>
         sdk.healthCheck.checkPortListening(effects, uiPort, {
           successMessage: i18n('Ten31 Thoughts is ready'),
-          errorMessage: i18n('Ten31 Thoughts is not ready'),
+          errorMessage: i18n('Ten31 Thoughts is not responding'),
         }),
     },
     requires: [],

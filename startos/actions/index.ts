@@ -1,4 +1,3 @@
-import { sdk } from '../sdk'
-import { configureLlm } from './configureLlm'
+import { sdk } from '../sdk'
 
-export const actions = sdk.Actions.of().add(configureLlm)
+export const actions = sdk.Actions.of()
