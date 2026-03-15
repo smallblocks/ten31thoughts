@@ -29,12 +29,19 @@ jobs:
       - name: Build the service package
         id: build
         run: |
-          # Initialize for V2 packaging
-          start-cli init-key
-          # Build Docker image
-          make image.tar
-          # Pack using start-cli for V2 format
-          start-cli s9pk pack --icon icon.png -o tenthoughts.s9pk
+          # Build V1 package using start-sdk
+          start-sdk init
+          make
+          
+          # Install newer start-cli for V2 conversion
+          wget -qO /usr/local/bin/start-cli-v2 https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
+          chmod +x /usr/local/bin/start-cli-v2
+          
+          # Initialize developer key and convert to V2
+          start-cli-v2 init-key
+          start-cli-v2 s9pk convert tenthoughts.s9pk
+          
+          ls -la *.s9pk
         shell: bash
 
       - name: Upload .s9pk artifact
