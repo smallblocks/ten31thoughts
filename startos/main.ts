@@ -18,8 +18,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
   }
 
   // Set API keys based on provider
+  console.log('DEBUG store:', JSON.stringify(store))
+  console.log('DEBUG anthropicApiKey exists:', !!store?.anthropicApiKey)
   if (store?.anthropicApiKey) {
     llmEnv.ANTHROPIC_API_KEY = store.anthropicApiKey
+    console.log('DEBUG added ANTHROPIC_API_KEY to env')
   }
   if (store?.openaiApiKey) {
     llmEnv.OPENAI_API_KEY = store.openaiApiKey
@@ -41,6 +44,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (store?.embeddingModel) {
     llmEnv.TEN31_LLM_EMBEDDING_MODEL = store.embeddingModel
   }
+
+  console.log('DEBUG final llmEnv:', JSON.stringify(llmEnv))
 
   // Create subcontainer from the main image with the data volume mounted
   const subcontainer = await sdk.SubContainer.of(
