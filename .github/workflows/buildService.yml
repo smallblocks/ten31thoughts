@@ -31,12 +31,16 @@ jobs:
 
       - name: Install newer start-cli
         run: |
-          # Download and install newer start-cli with s9pk subcommand
           mkdir -p $HOME/bin
           wget -qO $HOME/bin/start-cli https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
           chmod +x $HOME/bin/start-cli
           echo "$HOME/bin" >> $GITHUB_PATH
-          $HOME/bin/start-cli --version
+
+      - name: Install dependencies and build SDK
+        run: |
+          npm ci || npm install
+          npm run build
+          ls -la javascript/
 
       - name: Build x86_64 package
         run: |
