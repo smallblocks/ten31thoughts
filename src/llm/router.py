@@ -4,12 +4,17 @@ Unified interface to multiple LLM providers via LiteLLM.
 Supports Claude, OpenAI, Ollama, and any LiteLLM-compatible provider.
 """
 
+import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+# StartOS store.json path for LLM configuration
+STORE_JSON_PATH = Path("/data/store.json")
 
 
 @dataclass
@@ -45,16 +50,40 @@ class LLMRouter:
         """
         self.config = config or self._default_config()
 
+    def _load_store(self) -> dict:
+        """Load LLM config from StartOS store.json, fallback to env vars."""
+        if STORE_JSON_PATH.exists():
+            try:
+                with open(STORE_JSON_PATH) as f:
+                    store = json.load(f)
+                    logger.info(f"Loaded LLM config from {STORE_JSON_PATH}")
+                    return store
+            except Exception as e:
+                logger.warning(f"Failed to read store.json: {e}")
+        return {}
+
     def _default_config(self) -> dict[str, LLMConfig]:
-        """Build default config from environment variables."""
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        openai_key = os.getenv("OPENAI_API_KEY")
-        ollama_base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        """Build default config from store.json or environment variables."""
+        store = self._load_store()
+
+        # Prefer store.json, fallback to env vars
+        anthropic_key = store.get("anthropicApiKey") or os.getenv("ANTHROPIC_API_KEY")
+        openai_key = store.get("openaiApiKey") or os.getenv("OPENAI_API_KEY")
+        ollama_base = store.get("ollamaBaseUrl") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+        # Model overrides from store
+        model_overrides = {
+            "analysis": store.get("analysisModel"),
+            "synthesis": store.get("synthesisModel"),
+            "chat": store.get("chatModel"),
+            "embedding": store.get("embeddingModel"),
+        }
 
         configs = {}
 
         for task, default_model in DEFAULT_MODELS.items():
-            model = os.getenv(f"TEN31_LLM_{task.upper()}_MODEL", default_model)
+            # Priority: store.json > env var > default
+            model = model_overrides.get(task) or os.getenv(f"TEN31_LLM_{task.upper()}_MODEL", default_model)
 
             config = LLMConfig(model=model)
 

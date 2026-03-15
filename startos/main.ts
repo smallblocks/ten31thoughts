@@ -17,35 +17,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
     CHROMADB_PERSIST_DIR: '/data/chromadb',
   }
 
-  // Set API keys based on provider
-  console.log('DEBUG store:', JSON.stringify(store))
-  console.log('DEBUG anthropicApiKey exists:', !!store?.anthropicApiKey)
-  if (store?.anthropicApiKey) {
-    llmEnv.ANTHROPIC_API_KEY = store.anthropicApiKey
-    console.log('DEBUG added ANTHROPIC_API_KEY to env')
-  }
-  if (store?.openaiApiKey) {
-    llmEnv.OPENAI_API_KEY = store.openaiApiKey
-  }
-  if (store?.ollamaBaseUrl) {
-    llmEnv.OLLAMA_BASE_URL = store.ollamaBaseUrl
-  }
-
-  // Set model preferences
-  if (store?.analysisModel) {
-    llmEnv.TEN31_LLM_ANALYSIS_MODEL = store.analysisModel
-  }
-  if (store?.synthesisModel) {
-    llmEnv.TEN31_LLM_SYNTHESIS_MODEL = store.synthesisModel
-  }
-  if (store?.chatModel) {
-    llmEnv.TEN31_LLM_CHAT_MODEL = store.chatModel
-  }
-  if (store?.embeddingModel) {
-    llmEnv.TEN31_LLM_EMBEDDING_MODEL = store.embeddingModel
-  }
-
-  console.log('DEBUG final llmEnv:', JSON.stringify(llmEnv))
+  // Note: LLM config (API keys, models) is read directly from /data/store.json
+  // by the Python code, since SDK env vars aren't passed to subcontainers.
+  // The reactive read above ensures the daemon restarts when config changes.
 
   // Create subcontainer from the main image with the data volume mounted
   const subcontainer = await sdk.SubContainer.of(
