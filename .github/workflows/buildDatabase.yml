@@ -1,0 +1,79 @@
+name: Build Seed Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "Which phase to run"
+        required: true
+        default: "crawl"
+        type: choice
+        options:
+          - crawl
+          - analyze-timestamp
+          - analyze-macrovoices
+          - package
+
+jobs:
+  build-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install httpx beautifulsoup4 lxml readability-lxml feedparser \
+            sqlalchemy chromadb litellm python-dateutil tqdm
+
+      - name: Download previous database (if exists)
+        uses: actions/cache@v4
+        with:
+          path: output/
+          key: seed-db-${{ github.run_number }}
+          restore-keys: |
+            seed-db-
+
+      - name: Run crawl
+        if: inputs.phase == 'crawl'
+        run: python3 tools/build_db.py crawl
+
+      - name: Run analyze (Timestamp)
+        if: inputs.phase == 'analyze-timestamp'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 tools/build_db.py analyze --source timestamp --batch-size 10 --delay 1
+
+      - name: Run analyze (MacroVoices)
+        if: inputs.phase == 'analyze-macrovoices'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 tools/build_db.py analyze --source macrovoices --batch-size 10 --delay 1
+
+      - name: Package
+        if: inputs.phase == 'package'
+        run: python3 tools/build_db.py package
+
+      - name: Show status
+        run: python3 tools/build_db.py status
+
+      - name: Save database to cache
+        uses: actions/cache/save@v4
+        with:
+          path: output/
+          key: seed-db-${{ github.run_number }}
+
+      - name: Upload seed data (package phase only)
+        if: inputs.phase == 'package'
+        uses: actions/upload-artifact@v4
+        with:
+          name: seed-data
+          path: output/seed-data.tar.gz
+          retention-days: 90
