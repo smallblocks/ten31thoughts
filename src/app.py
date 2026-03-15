@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .db.session import init_db, get_db
@@ -102,3 +103,7 @@ def system_status(session: Session = Depends(get_db)):
     manager = FeedManager(session)
     stats = manager.get_content_stats()
     return {"status": "healthy", "version": "2.0.0", "content": stats}
+
+
+# Serve the React frontend — MUST be last (catches all unmatched routes)
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
