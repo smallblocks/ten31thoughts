@@ -34,6 +34,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Application code
 COPY src/ ./src/
 COPY scripts/ ./scripts/
+COPY tools/ ./tools/
 COPY docker_entrypoint/ ./docker_entrypoint/
 RUN chmod +x ./docker_entrypoint/*.sh
 
