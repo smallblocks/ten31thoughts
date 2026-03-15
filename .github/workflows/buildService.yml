@@ -29,28 +29,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install npm dependencies
-        run: npm ci || npm install
-
-      - name: Build TypeScript SDK
-        run: npm run build
-
-      - name: Build Docker image
-        run: |
-          mkdir -p images
-          docker buildx build \
-            --tag start9/tenthoughts/main:0.3.0.1 \
-            --platform=linux/amd64 \
-            -o type=docker,dest=images/main.tar \
-            .
-
-      - name: Pack s9pk
-        run: |
-          start-cli init-key
-          start-cli s9pk pack -o tenthoughts.s9pk
+      - name: Build x86_64 package
+        run: make x86
 
       - name: Upload .s9pk artifact
         uses: actions/upload-artifact@v4
         with:
           name: tenthoughts.s9pk
-          path: tenthoughts.s9pk
+          path: tenthoughts*.s9pk
