@@ -1,2 +1,5 @@
-// No dependencies on other StartOS services
-export const dependencies = {}
+import { sdk } from './sdk'
+
+export const setDependencies = sdk.setupDependencies(
+  async ({ effects }) => ({}),
+)

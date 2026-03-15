@@ -1,7 +1,9 @@
+import { i18n } from './i18n'
 import { sdk } from './sdk'
+import { uiPort } from './utils'
 
 export const main = sdk.setupMain(async ({ effects }) => {
-  console.info('Starting Ten31 Thoughts...')
+  console.info(i18n('Starting Ten31 Thoughts!'))
 
   return sdk.Daemons.of(effects).addDaemon('primary', {
     subcontainer: await sdk.SubContainer.of(
@@ -15,9 +17,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
       }),
       'tenthoughts-main',
     ),
-    exec: {
-      command: ['/usr/local/bin/uvicorn'],
-      args: ['src.app:app', '--host', '0.0.0.0', '--port', '8431', '--workers', '1'],
+    command: {
+      command: '/usr/local/bin/uvicorn',
+      args: ['src.app:app', '--host', '0.0.0.0', '--port', String(uiPort), '--workers', '1'],
       env: {
         PYTHONUNBUFFERED: '1',
         PYTHONPATH: '/app',
@@ -26,11 +28,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
     },
     ready: {
-      display: 'Web Interface',
+      display: i18n('Web Interface'),
       fn: () =>
-        sdk.healthCheck.checkPortListening(effects, 8431, {
-          successMessage: 'Ten31 Thoughts is ready',
-          errorMessage: 'Ten31 Thoughts is not responding',
+        sdk.healthCheck.checkPortListening(effects, uiPort, {
+          successMessage: i18n('Ten31 Thoughts is ready'),
+          errorMessage: i18n('Ten31 Thoughts is not responding'),
         }),
     },
     requires: [],

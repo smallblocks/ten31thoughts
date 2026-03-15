@@ -1,5 +1,7 @@
-import { sdk } from '../sdk'
+import { VersionGraph } from '@start9labs/start-sdk'
+import { current, other } from './versions'
 
-export const versionGraph = sdk.setupInstall({
-  migrations: {},
+export const versionGraph = VersionGraph.of({
+  current,
+  other,
 })

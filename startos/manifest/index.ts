@@ -1,5 +1,8 @@
 import { setupManifest } from '@start9labs/start-sdk'
 
+const short = 'Macro intelligence service coordinating your thesis with external voices'
+const long = 'Ten31 Thoughts ingests your published macro framework alongside external macro interviews to surface the top mental models for navigating the current macro landscape.'
+
 export const manifest = setupManifest({
   id: 'tenthoughts',
   title: 'Ten31 Thoughts',
@@ -9,10 +12,7 @@ export const manifest = setupManifest({
   marketingUrl: 'https://ten31.xyz',
   donationUrl: null,
   docsUrls: ['https://github.com/smallblocks/ten31thoughts/blob/main/README.md'],
-  description: {
-    short: 'Macro intelligence service coordinating your thesis with external voices',
-    long: 'Ten31 Thoughts ingests your published macro framework alongside external macro interviews to surface the top mental models for navigating the current macro landscape.',
-  },
+  description: { short, long },
   volumes: ['main'],
   images: {
     main: {
