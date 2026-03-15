@@ -28,10 +28,9 @@ image.tar: Dockerfile src/ requirements.txt frontend/
 		-o type=docker,dest=image.tar \
 		.
 
-# Package into s9pk (V2 format for StartOS 0.4+)
-# start-cli s9pk pack produces V2 format packages
-$(PKG_ID).s9pk: manifest.yaml image.tar INSTRUCTIONS.md LICENSE icon.png javascript/index.js
-	start-cli s9pk pack --icon icon.png
+# Package into s9pk (V1 format - will be converted to V2)
+$(PKG_ID).s9pk: manifest.yaml image.tar INSTRUCTIONS.md LICENSE icon.png
+	start-sdk pack
 
 # Verify the built package
 verify: $(PKG_ID).s9pk
