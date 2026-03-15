@@ -17,15 +17,14 @@ export const main = sdk.setupMain(async ({ effects }) => {
       }),
       'tenthoughts-main',
     ),
-    command: {
-      command: '/usr/local/bin/uvicorn',
-      args: ['src.app:app', '--host', '0.0.0.0', '--port', String(uiPort), '--workers', '1'],
-      env: {
-        PYTHONUNBUFFERED: '1',
-        PYTHONPATH: '/app',
-        DATABASE_URL: 'sqlite:////data/ten31thoughts.db',
-        CHROMADB_PERSIST_DIR: '/data/chromadb',
-      },
+    exec: { 
+      command: [
+        '/usr/local/bin/uvicorn',
+        'src.app:app',
+        '--host', '0.0.0.0',
+        '--port', String(uiPort),
+        '--workers', '1',
+      ],
     },
     ready: {
       display: i18n('Web Interface'),
