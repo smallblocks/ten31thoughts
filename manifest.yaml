@@ -17,7 +17,7 @@ assets:
   license: LICENSE
   icon: icon.png
   instructions: INSTRUCTIONS.md
-  docker-images: image.tar
+  docker-images: docker-images
 main:
   type: docker
   image: main

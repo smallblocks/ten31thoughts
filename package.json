@@ -1,12 +1,17 @@
 {
   "name": "tenthoughts-startos",
   "version": "0.3.0.1",
-  "description": "StartOS package for Ten31 Thoughts",
-  "main": "startos/index.ts",
+  "description": "StartOS V2 package for Ten31 Thoughts",
   "scripts": {
-    "build": "start-sdk build"
+    "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
+    "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@start9labs/start-sdk": "*"
+    "@start9labs/start-sdk": "^0.4.0-beta.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@vercel/ncc": "^0.38.3",
+    "typescript": "^5.8.3"
   }
 }

@@ -21,28 +21,44 @@ jobs:
       - name: Prepare StartOS SDK
         uses: Start9Labs/sdk@v1
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Build the service package
-        id: build
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Build TypeScript SDK
+        run: npm run build
+
+      - name: Build multi-arch Docker images
         run: |
-          # Build V1 package using start-sdk
+          mkdir -p docker-images
+          
+          # Build x86_64
+          docker buildx build \
+            --tag start9/tenthoughts/main:0.3.0.1 \
+            --platform=linux/amd64 \
+            -o type=docker,dest=docker-images/x86_64.tar \
+            .
+          
+          # Build aarch64
+          docker buildx build \
+            --tag start9/tenthoughts/main:0.3.0.1 \
+            --platform=linux/arm64/v8 \
+            -o type=docker,dest=docker-images/aarch64.tar \
+            .
+
+      - name: Initialize SDK and pack
+        run: |
           start-sdk init
-          make
-          
-          # Install newer start-cli for V2 conversion
-          wget -qO /usr/local/bin/start-cli-v2 https://github.com/Start9Labs/start-os/releases/download/v0.4.0-alpha.20/start-cli_x86_64-linux
-          chmod +x /usr/local/bin/start-cli-v2
-          
-          # Initialize developer key and convert to V2
-          start-cli-v2 init-key
-          start-cli-v2 s9pk convert tenthoughts.s9pk
-          
-          ls -la *.s9pk
-        shell: bash
+          start-sdk pack
 
       - name: Upload .s9pk artifact
         uses: actions/upload-artifact@v4
