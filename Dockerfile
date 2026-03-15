@@ -6,9 +6,9 @@
 FROM node:20-slim AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --production=false 2>/dev/null || echo "No frontend yet"
+RUN npm install
 COPY frontend/ ./
-RUN npm run build 2>/dev/null || mkdir -p /app/frontend/dist && echo '<html><body><h1>Ten31 Thoughts</h1><p>Frontend build pending.</p></body></html>' > /app/frontend/dist/index.html
+RUN npm run build
 
 # ─── Stage 2: Application ───
 FROM python:3.12-slim
