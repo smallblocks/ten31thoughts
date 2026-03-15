@@ -1,0 +1,12 @@
+{
+  "name": "tenthoughts-startos",
+  "version": "0.3.0.1",
+  "description": "StartOS package for Ten31 Thoughts",
+  "main": "startos/index.ts",
+  "scripts": {
+    "build": "start-sdk build"
+  },
+  "dependencies": {
+    "@start9labs/start-sdk": "*"
+  }
+}

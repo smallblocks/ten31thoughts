@@ -17,10 +17,13 @@ all: $(PKG_ID).s9pk
 
 clean:
 	rm -f image.tar $(PKG_ID).s9pk
+	rm -rf node_modules dist
+
+# Install SDK TypeScript dependencies if package.json exists
+node_modules: package.json
+	npm install || true
 
 # Build Docker image
-# CRITICAL: The tag format MUST be start9/PKG_ID/IMAGE_NAME:PKG_VERSION
-# where IMAGE_NAME matches the `main.image` field in manifest.yaml
 image.tar: Dockerfile src/ requirements.txt frontend/
 	docker buildx build \
 		--tag start9/$(PKG_ID)/main:$(PKG_VERSION) \
@@ -28,14 +31,16 @@ image.tar: Dockerfile src/ requirements.txt frontend/
 		-o type=docker,dest=image.tar \
 		.
 
-# Package into s9pk (V1 format - will be converted to V2)
-$(PKG_ID).s9pk: manifest.yaml image.tar INSTRUCTIONS.md LICENSE icon.png
+# Package into s9pk
+# The SDK will compile TypeScript from startos/ if present,
+# or use manifest.yaml directly for V1-style packages
+$(PKG_ID).s9pk: manifest.yaml image.tar INSTRUCTIONS.md LICENSE icon.png node_modules
 	start-sdk pack
 
-# Verify the built package
+# Verify
 verify: $(PKG_ID).s9pk
 	start-sdk verify $(PKG_ID).s9pk
 
-# Install to a running StartOS device (requires start-cli configured)
+# Install to a running StartOS device
 install: $(PKG_ID).s9pk
 	start-cli package install $(PKG_ID).s9pk

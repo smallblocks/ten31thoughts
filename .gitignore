@@ -21,6 +21,8 @@ data/
 *.s9pk
 image.tar
 docker-images/
+dist/
+node_modules/
 
 # Environment
 .env
@@ -34,3 +36,4 @@ docker-images/
 # OS
 .DS_Store
 Thumbs.db
+package-lock.json

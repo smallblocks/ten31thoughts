@@ -9,7 +9,7 @@ support-site: "https://ten31.xyz"
 marketing-site: "https://ten31timestamp.com"
 build:
   - make
-min-os-version: 0.3.5
+min-os-version: 0.3.6
 description:
   short: "Macro intelligence service coordinating your thesis with external voices"
   long: "Ten31 Thoughts ingests your published macro framework alongside external macro interviews to surface the top mental models for navigating the current macro landscape."
@@ -94,5 +94,13 @@ backup:
       BACKUP: /mnt/backup
       main: /root/data
 migrations:
-  from: {}
-  to: {}
+  from:
+    "*":
+      type: script
+      args:
+        - "from"
+  to:
+    "*":
+      type: script
+      args:
+        - "to"
