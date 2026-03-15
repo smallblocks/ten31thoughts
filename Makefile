@@ -28,10 +28,10 @@ image.tar: Dockerfile src/ requirements.txt frontend/
 		-o type=docker,dest=image.tar \
 		.
 
-# Package into s9pk
-# start-sdk pack expects: manifest.yaml, image.tar, icon.png, LICENSE, INSTRUCTIONS.md
+# Package into s9pk (V2 format for StartOS 0.4+)
+# start-cli s9pk pack produces V2 format packages
 $(PKG_ID).s9pk: manifest.yaml image.tar INSTRUCTIONS.md LICENSE icon.png
-	start-sdk pack
+	start-cli s9pk pack
 
 # Verify the built package
 verify: $(PKG_ID).s9pk
