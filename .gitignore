@@ -2,7 +2,7 @@
 node_modules/
 
 # Build outputs
-docker-images/
+images/
 javascript/
 *.s9pk
 
@@ -25,3 +25,4 @@ __pycache__/
 # Misc
 .DS_Store
 Thumbs.db
+package-lock.json

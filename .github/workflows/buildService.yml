@@ -28,58 +28,29 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install npm dependencies
-        run: npm install
+        run: npm ci || npm install
 
       - name: Build TypeScript SDK
         run: npm run build
 
-      - name: Build multi-arch Docker images
+      - name: Build Docker image
         run: |
-          mkdir -p docker-images
-          
-          # Build x86_64
+          mkdir -p images
           docker buildx build \
             --tag start9/tenthoughts/main:0.3.0.1 \
             --platform=linux/amd64 \
-            -o type=docker,dest=docker-images/x86_64.tar \
-            .
-          
-          # Build aarch64
-          docker buildx build \
-            --tag start9/tenthoughts/main:0.3.0.1 \
-            --platform=linux/arm64/v8 \
-            -o type=docker,dest=docker-images/aarch64.tar \
+            -o type=docker,dest=images/main.tar \
             .
 
-      - name: Initialize SDK and pack
+      - name: Pack s9pk
         run: |
-          start-sdk init
-          start-sdk pack
+          start-cli init-key
+          start-cli s9pk pack -o tenthoughts.s9pk
 
       - name: Upload .s9pk artifact
         uses: actions/upload-artifact@v4
         with:
           name: tenthoughts.s9pk
           path: tenthoughts.s9pk
-
-  release:
-    needs: build
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download .s9pk artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tenthoughts.s9pk
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: tenthoughts.s9pk
-          generate_release_notes: true
