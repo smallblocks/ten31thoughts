@@ -18,6 +18,7 @@ from .api.analysis import router as analysis_router
 from .api.convergence import router as convergence_router
 from .api.chat import router as chat_router
 from .api.daily_brief import router as daily_brief_router
+from .api.markets import router as markets_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,7 +34,10 @@ def start_scheduler():
     """Start the APScheduler background task scheduler."""
     global scheduler
     from apscheduler.schedulers.background import BackgroundScheduler
-    from .worker.scheduler import poll_all_feeds_job, process_analysis_job, weekly_synthesis_job, daily_brief_job
+    from .worker.scheduler import (
+        poll_all_feeds_job, process_analysis_job, weekly_synthesis_job,
+        daily_brief_job, market_matching_job
+    )
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -49,12 +53,16 @@ def start_scheduler():
     scheduler.add_job(daily_brief_job, "cron", hour=6, minute=0,
                       id="daily_brief", max_instances=1, coalesce=True)
 
+    # Check prediction market resolutions and match new predictions (every 6 hours)
+    scheduler.add_job(market_matching_job, "interval", hours=6,
+                      id="market_matching", max_instances=1, coalesce=True)
+
     # Weekly synthesis every Sunday at 6 AM UTC
     scheduler.add_job(weekly_synthesis_job, "cron", day_of_week="sun", hour=6, minute=0,
                       id="weekly_synthesis", max_instances=1, coalesce=True)
 
     scheduler.start()
-    logger.info("Background scheduler started (poll=15min, analysis=5min, daily=6AM, synthesis=Sunday 6AM)")
+    logger.info("Background scheduler started (poll=15min, analysis=5min, daily=6AM, markets=6h, synthesis=Sunday 6AM)")
 
 
 @asynccontextmanager
@@ -94,6 +102,7 @@ app.include_router(analysis_router)
 app.include_router(convergence_router)
 app.include_router(chat_router)
 app.include_router(daily_brief_router)
+app.include_router(markets_router)
 
 
 @app.get("/api/health")

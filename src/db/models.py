@@ -246,6 +246,40 @@ class WeeklyBriefing(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class PredictionMarketLink(Base):
+    """
+    Links thesis predictions to prediction market contracts.
+    Enables automated resolution via market outcomes.
+    """
+    __tablename__ = "prediction_market_links"
+
+    link_id = Column(String, primary_key=True, default=gen_id)
+    element_id = Column(String, ForeignKey("thesis_elements.element_id"), nullable=True)
+    framework_id = Column(String, ForeignKey("external_frameworks.framework_id"), nullable=True)
+    platform = Column(String, nullable=False)  # polymarket, kalshi
+    market_id = Column(String, nullable=False)
+    market_slug = Column(String, nullable=True)
+    market_title = Column(Text, nullable=False)
+    market_url = Column(Text, nullable=True)
+    price_at_link = Column(Float, nullable=True)  # probability when we linked it
+    current_price = Column(Float, nullable=True)  # last known probability
+    market_status = Column(String, default="open")  # open, closed, resolved
+    market_result = Column(String, nullable=True)  # yes, no (after resolution)
+    our_side = Column(String, nullable=True)  # yes, no - what we predicted
+    match_confidence = Column(Float, nullable=True)  # 0-1 LLM confidence in match
+    match_rationale = Column(Text, nullable=True)  # why LLM thinks this matches
+    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_market_link_element", "element_id"),
+        Index("idx_market_link_platform", "platform"),
+        Index("idx_market_link_status", "market_status"),
+    )
+
+
 # ─── Database Setup ───
 
 def get_engine(db_path: str = None):

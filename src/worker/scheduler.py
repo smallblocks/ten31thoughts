@@ -289,3 +289,85 @@ def daily_brief_job():
         logger.error(f"Daily brief generation failed: {e}")
     finally:
         session.close()
+
+
+def market_matching_job():
+    """Match new predictions to prediction markets and check resolutions."""
+    from sqlalchemy import select, and_
+
+    from ..markets.resolver import MarketResolver
+    from ..markets.matcher import PredictionMarketMatcher
+    from ..llm.router import LLMRouter
+    from ..db.models import ThesisElement, PredictionMarketLink, gen_id
+
+    logger.info("Running prediction market matching and resolution check...")
+    session = _get_session()
+
+    try:
+        # Check resolutions on existing links
+        resolver = MarketResolver(session)
+        resolution_stats = resolver.check_all_linked_markets()
+        resolver.close()
+
+        # Match new unlinked predictions
+        linked_ids = session.execute(
+            select(PredictionMarketLink.element_id)
+            .where(PredictionMarketLink.element_id.isnot(None))
+        ).scalars().all()
+
+        unlinked = session.execute(
+            select(ThesisElement).where(and_(
+                ThesisElement.is_prediction == True,
+                ThesisElement.element_id.notin_(linked_ids) if linked_ids else True,
+            )).limit(10)
+        ).scalars().all()
+
+        matched = 0
+        if unlinked:
+            llm = LLMRouter()
+            matcher = PredictionMarketMatcher(llm)
+
+            loop = asyncio.new_event_loop()
+            try:
+                for element in unlinked:
+                    item = element.content_item
+                    matches = loop.run_until_complete(matcher.find_matches(
+                        prediction_text=element.claim_text,
+                        topic=element.topic,
+                        horizon=element.prediction_horizon or "",
+                        source=item.title if item else "",
+                    ))
+
+                    if matches:
+                        for match in matches[:2]:
+                            link = PredictionMarketLink(
+                                link_id=gen_id(),
+                                element_id=element.element_id,
+                                platform=match["platform"],
+                                market_id=match["market_id"],
+                                market_slug=match.get("market_slug"),
+                                market_title=match["title"],
+                                market_url=match.get("market_url"),
+                                price_at_link=match.get("price"),
+                                current_price=match.get("price"),
+                                market_status="open",
+                                our_side=match.get("our_side", "yes"),
+                                match_confidence=match.get("match_confidence"),
+                                match_rationale=match.get("match_rationale"),
+                            )
+                            session.add(link)
+                        matched += 1
+
+                session.commit()
+            finally:
+                loop.close()
+                matcher.close()
+
+            logger.info(f"Market matching: {matched} predictions linked to markets")
+
+        logger.info(f"Market resolution: {resolution_stats}")
+
+    except Exception as e:
+        logger.error(f"Market matching/resolution failed: {e}")
+    finally:
+        session.close()
