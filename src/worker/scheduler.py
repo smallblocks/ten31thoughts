@@ -45,7 +45,7 @@ def process_analysis_job():
     session = _get_session()
     try:
         manager = FeedManager(session)
-        pending = manager.get_pending_items(limit=5)
+        pending = manager.get_pending_items(limit=20)
 
         if not pending:
             return
