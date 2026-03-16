@@ -42,9 +42,9 @@ def start_scheduler():
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
-    # Poll feeds every 15 minutes
-    scheduler.add_job(poll_all_feeds_job, "interval", minutes=15, id="poll_feeds",
-                      max_instances=1, coalesce=True)
+    # Poll feeds daily at 5 AM UTC (new episodes/newsletters don't need more frequent checks)
+    scheduler.add_job(poll_all_feeds_job, "cron", hour=5, minute=0,
+                      id="poll_feeds", max_instances=1, coalesce=True)
 
     # Process analysis queue every 5 minutes
     scheduler.add_job(process_analysis_job, "interval", minutes=5, id="process_analysis",
@@ -63,7 +63,7 @@ def start_scheduler():
                       id="weekly_synthesis", max_instances=1, coalesce=True)
 
     scheduler.start()
-    logger.info("Background scheduler started (poll=15min, analysis=5min, daily=6AM, markets=6h, synthesis=Sunday 6AM)")
+    logger.info("Background scheduler started (poll=5AM, analysis=5min, daily=6AM, markets=6h, synthesis=Sunday 6AM)")
 
 
 @asynccontextmanager

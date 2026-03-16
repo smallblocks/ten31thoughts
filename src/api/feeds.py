@@ -33,7 +33,7 @@ class AddFeedRequest(BaseModel):
     category: str = Field(..., description="'our_thesis' or 'external_interview'")
     display_name: Optional[str] = Field(None, description="Human-readable name")
     tags: Optional[list[str]] = Field(default_factory=list, description="Topic tags")
-    poll_interval_minutes: int = Field(30, description="Minutes between polls")
+    poll_interval_minutes: int = Field(1440, description="Minutes between polls (default: daily)")
 
 
 class UpdateFeedRequest(BaseModel):
