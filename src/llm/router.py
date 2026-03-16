@@ -11,7 +11,30 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
+import litellm
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
+
 logger = logging.getLogger(__name__)
+
+# Retry decorator for transient connection errors
+# Retries up to 3 times with exponential backoff (1s, 2s, 4s)
+llm_retry = retry(
+    retry=retry_if_exception_type((
+        litellm.APIConnectionError,
+        litellm.RateLimitError,
+        litellm.ServiceUnavailableError,
+    )),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 
 # StartOS store.json path for LLM configuration
 STORE_JSON_PATH = Path("/data/store.json")
@@ -121,8 +144,6 @@ class LLMRouter:
         Returns:
             The model's response text.
         """
-        import litellm
-
         config = self.config.get(task)
         if not config:
             raise ValueError(f"No LLM configuration for task: {task}")
@@ -142,11 +163,16 @@ class LLMRouter:
             kwargs["messages"] = [{"role": "system", "content": system}] + messages
 
         try:
-            response = await litellm.acompletion(**kwargs)
+            response = await self._call_completion(**kwargs)
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"LLM call failed for task={task}, model={config.model}: {e}")
             raise
+
+    @llm_retry
+    async def _call_completion(self, **kwargs):
+        """Internal method with retry wrapper for litellm.acompletion."""
+        return await litellm.acompletion(**kwargs)
 
     async def complete_json(
         self,
@@ -158,8 +184,6 @@ class LLMRouter:
         Send a completion request expecting JSON output.
         Parses the response and returns a dict.
         """
-        import json
-
         full_system = (system or "") + (
             "\n\nYou MUST respond with valid JSON only. "
             "No markdown code fences, no preamble, no explanation. "
@@ -193,8 +217,6 @@ class LLMRouter:
         Generate embeddings for a list of texts.
         Uses the 'embedding' task configuration.
         """
-        import litellm
-
         config = self.config.get("embedding")
         if not config:
             raise ValueError("No embedding model configured")
@@ -209,11 +231,16 @@ class LLMRouter:
             kwargs["api_base"] = config.api_base
 
         try:
-            response = await litellm.aembedding(**kwargs)
+            response = await self._call_embedding(**kwargs)
             return [item["embedding"] for item in response.data]
         except Exception as e:
             logger.error(f"Embedding call failed: {e}")
             raise
+
+    @llm_retry
+    async def _call_embedding(self, **kwargs):
+        """Internal method with retry wrapper for litellm.aembedding."""
+        return await litellm.aembedding(**kwargs)
 
     def get_model_info(self) -> dict:
         """Return current model assignments for each task."""
