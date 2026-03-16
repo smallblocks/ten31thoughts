@@ -57,5 +57,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:latest
             ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.short }}
+          build-args: |
+            SEED_DATA_URL=https://github.com/smallblocks/ten31thoughts/releases/download/seed-v1/seed-data.tar.gz
           cache-from: type=gha
           cache-to: type=gha,mode=max

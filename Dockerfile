@@ -44,6 +44,20 @@ COPY --from=frontend-build /app/frontend/dist ./static
 # Create data directories
 RUN mkdir -p /data /data/briefings /data/chromadb
 
+# Download pre-built seed database (historical MacroVoices + Timestamp analysis)
+# This gives every install the full historical knowledge base from day one.
+# To update: upload a new seed-data.tar.gz to a GitHub Release and rebuild.
+ARG SEED_DATA_URL=""
+RUN if [ -n "$SEED_DATA_URL" ]; then \
+      echo "Downloading seed database from $SEED_DATA_URL..." && \
+      curl -fsSL "$SEED_DATA_URL" -o /tmp/seed-data.tar.gz && \
+      tar xzf /tmp/seed-data.tar.gz -C /data/ && \
+      rm /tmp/seed-data.tar.gz && \
+      echo "Seed database installed: $(ls -la /data/ten31thoughts.db 2>/dev/null || echo 'no db') $(du -sh /data/chromadb 2>/dev/null || echo 'no chromadb')" ; \
+    else \
+      echo "No seed data URL provided — starting with empty database" ; \
+    fi
+
 # Environment defaults
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
