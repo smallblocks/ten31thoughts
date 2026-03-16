@@ -261,3 +261,31 @@ def weekly_synthesis_job():
         logger.error(f"Weekly synthesis failed: {e}")
     finally:
         session.close()
+
+
+def daily_brief_job():
+    """Generate the daily intelligence brief (runs every morning)."""
+    from ..synthesis.daily_brief import DailyBriefGenerator
+    from ..llm.router import LLMRouter
+
+    logger.info("Generating daily intelligence brief...")
+    session = _get_session()
+
+    try:
+        llm = LLMRouter()
+        generator = DailyBriefGenerator(llm, session)
+
+        loop = asyncio.new_event_loop()
+        try:
+            brief = loop.run_until_complete(generator.generate_daily_brief(lookback_hours=24))
+            logger.info(
+                f"Daily brief complete: {brief['items_analyzed']} items, "
+                f"{len(brief['verdicts'])} verdicts"
+            )
+        finally:
+            loop.close()
+
+    except Exception as e:
+        logger.error(f"Daily brief generation failed: {e}")
+    finally:
+        session.close()

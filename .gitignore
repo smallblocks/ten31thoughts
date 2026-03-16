@@ -6,3 +6,4 @@ docker-images/
 *.s9pk
 .startos/
 output/
+__pycache__/
