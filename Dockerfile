@@ -47,13 +47,17 @@ RUN mkdir -p /data /data/briefings /data/chromadb
 # Download pre-built seed database (historical MacroVoices + Timestamp analysis)
 # This gives every install the full historical knowledge base from day one.
 # To update: upload a new seed-data.tar.gz to a GitHub Release and rebuild.
+# Note: Download is optional — build continues if URL returns 404.
 ARG SEED_DATA_URL=""
 RUN if [ -n "$SEED_DATA_URL" ]; then \
       echo "Downloading seed database from $SEED_DATA_URL..." && \
-      curl -fsSL "$SEED_DATA_URL" -o /tmp/seed-data.tar.gz && \
-      tar xzf /tmp/seed-data.tar.gz -C /data/ && \
-      rm /tmp/seed-data.tar.gz && \
-      echo "Seed database installed: $(ls -la /data/ten31thoughts.db 2>/dev/null || echo 'no db') $(du -sh /data/chromadb 2>/dev/null || echo 'no chromadb')" ; \
+      if curl -fsSL "$SEED_DATA_URL" -o /tmp/seed-data.tar.gz 2>/dev/null; then \
+        tar xzf /tmp/seed-data.tar.gz -C /data/ && \
+        rm /tmp/seed-data.tar.gz && \
+        echo "Seed database installed: $(ls -la /data/ten31thoughts.db 2>/dev/null || echo 'no db') $(du -sh /data/chromadb 2>/dev/null || echo 'no chromadb')" ; \
+      else \
+        echo "Seed data not available (404) — starting with empty database" ; \
+      fi ; \
     else \
       echo "No seed data URL provided — starting with empty database" ; \
     fi
