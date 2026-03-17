@@ -3,7 +3,7 @@ Ten31 Thoughts - LLM Prompt Templates
 Versioned prompt templates for all analysis passes.
 """
 
-from ..llm.date_context import get_date_context
+from ...llm.date_context import get_date_context
 
 # Prepend date context to all system prompts so the LLM knows today's date
 # and treats all content as real (not fictional/hypothetical)
