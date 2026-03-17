@@ -169,6 +169,78 @@ class LLMRouter:
             logger.error(f"LLM call failed for task={task}, model={config.model}: {e}")
             raise
 
+    async def complete_with_tools(
+        self,
+        task: str,
+        messages: list[dict],
+        tools: list[dict],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system: Optional[str] = None,
+    ) -> dict:
+        """
+        Send a completion request with tool/function calling support.
+
+        Args:
+            task: Task type ("analysis", "synthesis", "chat")
+            messages: List of message dicts
+            tools: List of tool definitions (OpenAI function calling format)
+            temperature: Override default temperature
+            max_tokens: Override default max tokens
+            system: System prompt
+
+        Returns:
+            Dict with "content" (str or None) and "tool_calls" (list or None).
+        """
+        config = self.config.get(task)
+        if not config:
+            raise ValueError(f"No LLM configuration for task: {task}")
+
+        final_messages = messages.copy()
+        if system:
+            final_messages = [{"role": "system", "content": system}] + final_messages
+
+        kwargs = {
+            "model": config.model,
+            "messages": final_messages,
+            "temperature": temperature if temperature is not None else config.temperature,
+            "max_tokens": max_tokens or config.max_tokens,
+            "tools": tools,
+        }
+
+        if config.api_key:
+            kwargs["api_key"] = config.api_key
+        if config.api_base:
+            kwargs["api_base"] = config.api_base
+
+        try:
+            response = await self._call_completion(**kwargs)
+            message = response.choices[0].message
+            
+            result = {
+                "content": message.content,
+                "tool_calls": None,
+            }
+            
+            # Extract tool calls if present
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                result["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    }
+                    for tc in message.tool_calls
+                ]
+            
+            return result
+        except Exception as e:
+            logger.error(f"LLM call with tools failed for task={task}, model={config.model}: {e}")
+            raise
+
     @llm_retry
     async def _call_completion(self, **kwargs):
         """Internal method with retry wrapper for litellm.acompletion."""

@@ -20,6 +20,7 @@ from .api.chat import router as chat_router
 from .api.daily_brief import router as daily_brief_router
 from .api.markets import router as markets_router
 from .api.episodes import router as episodes_router
+from .api.search import router as search_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -105,6 +106,7 @@ app.include_router(chat_router)
 app.include_router(daily_brief_router)
 app.include_router(markets_router)
 app.include_router(episodes_router)
+app.include_router(search_router)
 
 
 @app.get("/api/health")

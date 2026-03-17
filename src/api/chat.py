@@ -1,9 +1,11 @@
 """
 Ten31 Thoughts - Chat API
 RAG-powered chat interface for querying the intelligence layer.
-Combines vector search, structured data queries, and LLM generation.
+Combines vector search, structured data queries, LLM generation,
+and web search via SearXNG.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -21,6 +23,7 @@ from ..db.models import (
 from ..db.session import get_db
 from ..db.vector import VectorStore
 from ..llm.router import LLMRouter
+from .search import execute_search
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +110,12 @@ WHAT YOU HAVE ACCESS TO:
 - Blind spot detection highlighting topics that are systematically under-discussed
 - Prediction tracking with market-adjudicated outcomes via Polymarket and Kalshi
 
+TOOLS:
+You have access to a web_search tool that queries the internet via a local SearXNG instance.
+Use it when you need current data that is not in the database — Fed announcements, recent
+market moves, breaking news, or any real-time information. Do not hallucinate current prices
+or data; call web_search to get them. When you use search results, cite the source URL.
+
 The user is a macro analyst at Ten31. They want the sharpest possible analysis in the
 voice of their own firm's research. Do not waste their time."""
 
@@ -123,6 +132,54 @@ class ChatResponse(BaseModel):
     response: str
     sources: list[dict]
     metadata: dict
+
+
+# ─── Tool Definitions ───
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the internet for current information. Use when you need real-time data like current prices, recent news, Fed announcements, or any information not in the database.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "Number of results to return (1-10)",
+                        "default": 5
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    }
+]
+
+
+async def execute_tool(name: str, arguments: dict) -> str:
+    """Execute a tool and return the result as a string."""
+    if name == "web_search":
+        query = arguments.get("query", "")
+        count = arguments.get("count", 5)
+        results = await execute_search(query, count)
+        
+        if not results:
+            return f"No results found for: {query}"
+        
+        # Format results for the LLM
+        formatted = [f"Search results for: {query}\n"]
+        for i, r in enumerate(results, 1):
+            formatted.append(f"{i}. {r['title']}\n   URL: {r['url']}\n   {r['snippet']}\n")
+        
+        return "\n".join(formatted)
+    
+    return f"Unknown tool: {name}"
 
 
 class ContextBuilder:
@@ -349,12 +406,48 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
     else:
         messages.append({"role": "user", "content": request.message})
 
-    # Generate response
-    response_text = await llm.complete(
-        task="chat",
-        messages=messages,
-        system=CHAT_SYSTEM,
-    )
+    # Generate response with tool support
+    tool_calls_made = []
+    max_tool_iterations = 3  # Prevent infinite loops
+    
+    for iteration in range(max_tool_iterations):
+        response = await llm.complete_with_tools(
+            task="chat",
+            messages=messages,
+            system=CHAT_SYSTEM,
+            tools=TOOLS,
+        )
+        
+        # Check if the model wants to call a tool
+        if response.get("tool_calls"):
+            for tool_call in response["tool_calls"]:
+                tool_name = tool_call["function"]["name"]
+                tool_args = json.loads(tool_call["function"]["arguments"])
+                
+                logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
+                tool_result = await execute_tool(tool_name, tool_args)
+                tool_calls_made.append({"tool": tool_name, "args": tool_args})
+                
+                # Add assistant message with tool call
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [tool_call],
+                })
+                
+                # Add tool result
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": tool_result,
+                })
+        else:
+            # No tool calls, we have our final response
+            response_text = response.get("content", "")
+            break
+    else:
+        # Exhausted iterations
+        response_text = response.get("content", "Unable to complete the request.")
 
     return ChatResponse(
         response=response_text,
@@ -362,6 +455,7 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
         metadata={
             "context_scope": request.context_scope or "auto",
             "sources_used": len(sources),
+            "tool_calls": tool_calls_made,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
