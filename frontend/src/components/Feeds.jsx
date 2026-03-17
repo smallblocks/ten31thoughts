@@ -47,6 +47,116 @@ function FeedCard({ feed, onDelete, onPoll }) {
   )
 }
 
+function PDFUploader({ onUploaded }) {
+  const [uploading, setUploading] = useState(false)
+  const [result, setResult] = useState(null)
+  const [sourceName, setSourceName] = useState('')
+  const [author, setAuthor] = useState('')
+  const [category, setCategory] = useState('external_interview')
+  const [dragOver, setDragOver] = useState(false)
+
+  async function handleUpload(files) {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    setResult(null)
+
+    try {
+      if (files.length === 1) {
+        const formData = new FormData()
+        formData.append('file', files[0])
+        formData.append('category', category)
+        if (sourceName) formData.append('source_name', sourceName)
+        if (author) formData.append('author', author)
+
+        const res = await fetch('/api/upload/pdf', { method: 'POST', body: formData })
+        const data = await res.json()
+        if (res.ok) {
+          setResult({ success: true, message: `"${data.title}" queued for analysis (${data.pages} pages)` })
+          onUploaded?.()
+        } else {
+          setResult({ success: false, message: data.detail || 'Upload failed' })
+        }
+      } else {
+        const formData = new FormData()
+        for (const f of files) formData.append('files', f)
+        formData.append('category', category)
+        if (sourceName) formData.append('source_name', sourceName)
+        if (author) formData.append('author', author)
+
+        const res = await fetch('/api/upload/pdf/batch', { method: 'POST', body: formData })
+        const data = await res.json()
+        if (res.ok) {
+          setResult({ success: true, message: `${data.queued}/${data.total} PDFs queued for analysis` })
+          onUploaded?.()
+        } else {
+          setResult({ success: false, message: data.detail || 'Batch upload failed' })
+        }
+      }
+    } catch (e) {
+      setResult({ success: false, message: e.message })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    setDragOver(false)
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'))
+    if (files.length > 0) handleUpload(files)
+  }
+
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <input type="text" value={sourceName} onChange={e => setSourceName(e.target.value)}
+          placeholder="Source name (e.g. MacroAlf)"
+          className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-accent" />
+        <input type="text" value={author} onChange={e => setAuthor(e.target.value)}
+          placeholder="Author (optional)"
+          className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-accent" />
+        <select value={category} onChange={e => setCategory(e.target.value)}
+          className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-brand-accent">
+          <option value="external_interview">External Interview</option>
+          <option value="our_thesis">Our Thesis</option>
+        </select>
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => document.getElementById('pdf-file-input').click()}
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+          dragOver ? 'border-brand-accent bg-brand-accent/10' :
+          'border-gray-700 hover:border-gray-600 hover:bg-gray-900/30'
+        }`}
+      >
+        <input id="pdf-file-input" type="file" accept=".pdf" multiple className="hidden"
+          onChange={e => handleUpload(Array.from(e.target.files))} />
+        {uploading ? (
+          <p className="text-sm text-gray-400">Uploading and extracting text...</p>
+        ) : (
+          <>
+            <p className="text-sm text-gray-300 mb-1">Drop PDFs here or click to browse</p>
+            <p className="text-xs text-gray-500">Newsletters, research reports, investor letters · Max 50MB each</p>
+          </>
+        )}
+      </div>
+
+      {result && (
+        <div className={`mt-3 text-sm px-3 py-2 rounded ${
+          result.success ? 'bg-emerald-950/30 text-emerald-300 border border-emerald-800' :
+          'bg-red-950/30 text-red-300 border border-red-800'
+        }`}>
+          {result.message}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Feeds() {
   const [feeds, setFeeds] = useState([])
   const [loading, setLoading] = useState(true)
@@ -165,6 +275,17 @@ export default function Feeds() {
         ) : (
           feeds.map(f => <FeedCard key={f.feed_id} feed={f} onDelete={deleteFeed} onPoll={pollFeed} />)
         )}
+      </div>
+
+      {/* PDF Upload Section */}
+      <div className="mt-8 border-t border-gray-800 pt-6">
+        <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">
+          Upload PDF
+          <span className="ml-2 text-xs text-gray-500 font-normal normal-case">
+            Paid newsletters, research reports, investor letters
+          </span>
+        </h3>
+        <PDFUploader onUploaded={loadFeeds} />
       </div>
     </div>
   )
