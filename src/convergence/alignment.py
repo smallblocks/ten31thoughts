@@ -20,11 +20,13 @@ from ..db.models import (
     FeedCategory, ThesisAlignment, gen_id
 )
 from ..llm.router import LLMRouter
+from ..llm.date_context import get_date_context
 
 logger = logging.getLogger(__name__)
 
+_DATE_CTX = get_date_context()
 
-ALIGNMENT_SYSTEM = """You are an expert macro analyst comparing two analytical positions.
+ALIGNMENT_SYSTEM = _DATE_CTX + """You are an expert macro analyst comparing two analytical positions.
 You will be given a THESIS ELEMENT (from our internal newsletter) and an EXTERNAL FRAMEWORK
 (from a podcast guest or external commentator).
 

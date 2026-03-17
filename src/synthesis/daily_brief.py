@@ -15,6 +15,7 @@ from ..db.models import (
     AnalysisStatus, PredictionStatus,
 )
 from ..llm.router import LLMRouter
+from ..llm.date_context import inject_date_context
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,7 @@ Provide a verdict in JSON format:
             result = await self.llm.complete_json(
                 task="analysis",
                 messages=[{"role": "user", "content": prompt}],
-                system="You are a rigorous first-principles analyst. Evaluate reasoning quality objectively."
+                system=inject_date_context("You are a rigorous first-principles analyst. Evaluate reasoning quality objectively.")
             )
 
             return {

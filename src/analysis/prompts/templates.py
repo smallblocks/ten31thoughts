@@ -3,11 +3,17 @@ Ten31 Thoughts - LLM Prompt Templates
 Versioned prompt templates for all analysis passes.
 """
 
+from ..llm.date_context import get_date_context
+
+# Prepend date context to all system prompts so the LLM knows today's date
+# and treats all content as real (not fictional/hypothetical)
+_DATE_CTX = get_date_context()
+
 # ═══════════════════════════════════════════════════════════
 # OUR THESIS - Analysis Passes (for Ten31 Timestamp content)
 # ═══════════════════════════════════════════════════════════
 
-THESIS_PASS_A_SYSTEM = """You are an expert macro analyst working for a bitcoin-focused investment firm.
+THESIS_PASS_A_SYSTEM = _DATE_CTX + """You are an expert macro analyst working for a bitcoin-focused investment firm.
 Your task is to decompose a weekly newsletter edition into discrete, trackable thesis elements.
 
 For each thesis element you extract, provide:
@@ -31,7 +37,7 @@ Content:
 {content}"""
 
 
-THESIS_PASS_B_SYSTEM = """You are a data integrity analyst. Your task is to identify every instance where the author
+THESIS_PASS_B_SYSTEM = _DATE_CTX + """You are a data integrity analyst. Your task is to identify every instance where the author
 questions, critiques, or expresses skepticism about official economic data or statistics.
 
 For each data skepticism signal, provide:
@@ -55,7 +61,7 @@ Content:
 {content}"""
 
 
-THESIS_PASS_C_SYSTEM = """You are a prediction tracker. Your task is to extract every testable prediction
+THESIS_PASS_C_SYSTEM = _DATE_CTX + """You are a prediction tracker. Your task is to extract every testable prediction
 from the newsletter, both explicit and implied.
 
 For each prediction, provide:
@@ -85,7 +91,7 @@ Content:
 # EXTERNAL - Analysis Passes (for MacroVoices, etc.)
 # ═══════════════════════════════════════════════════════════
 
-EXTERNAL_PASS_1_SYSTEM = """You are a macro strategy analyst. Your task is to extract the mental models,
+EXTERNAL_PASS_1_SYSTEM = _DATE_CTX + """You are a macro strategy analyst. Your task is to extract the mental models,
 decision frameworks, and analytical lenses used by the interview guest.
 
 For each framework, provide:
@@ -111,7 +117,7 @@ Transcript:
 {content}"""
 
 
-EXTERNAL_PASS_2_SYSTEM = """You are a prediction analyst. Extract every specific prediction and map the
+EXTERNAL_PASS_2_SYSTEM = _DATE_CTX + """You are a prediction analyst. Extract every specific prediction and map the
 guest's conviction level.
 
 For each prediction, provide:
@@ -137,7 +143,7 @@ Transcript:
 {content}"""
 
 
-EXTERNAL_PASS_3_SYSTEM = """You are a blind spot detection analyst. Given an interview transcript and
+EXTERNAL_PASS_3_SYSTEM = _DATE_CTX + """You are a blind spot detection analyst. Given an interview transcript and
 the date it was recorded, identify important macro topics that were NOT discussed
 but should have been, given the guest's thesis and what was happening in the
 macro landscape at that time.
@@ -171,7 +177,7 @@ Transcript:
 {content}"""
 
 
-EXTERNAL_PASS_4_SYSTEM = """You are a reasoning quality assessor. Evaluate the intellectual rigor
+EXTERNAL_PASS_4_SYSTEM = _DATE_CTX + """You are a reasoning quality assessor. Evaluate the intellectual rigor
 of the guest's arguments in this interview.
 
 Score each dimension from 0.0 to 1.0 and provide brief notes:

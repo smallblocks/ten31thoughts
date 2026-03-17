@@ -23,6 +23,7 @@ from ..db.models import (
 from ..db.session import get_db
 from ..db.vector import VectorStore
 from ..llm.router import LLMRouter
+from ..llm.date_context import inject_date_context
 from .search import execute_search
 
 logger = logging.getLogger(__name__)
@@ -416,7 +417,7 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
             response = await llm.complete_with_tools(
                 task="chat",
                 messages=messages,
-                system=CHAT_SYSTEM,
+                system=inject_date_context(CHAT_SYSTEM),
                 tools=TOOLS,
             )
         except Exception as e:

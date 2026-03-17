@@ -16,8 +16,11 @@ from ..db.models import (
     Feed, FeedCategory, FeedStatus, AnalysisStatus, gen_id
 )
 from ..llm.router import LLMRouter
+from ..llm.date_context import get_date_context
 
 logger = logging.getLogger(__name__)
+
+_DATE_CTX = get_date_context()
 
 
 # Comprehensive macro topic checklist
@@ -45,7 +48,7 @@ MACRO_TOPIC_CHECKLIST = [
 ]
 
 
-BLIND_SPOT_SYSTEM = """You are a macro intelligence analyst. You have been given:
+BLIND_SPOT_SYSTEM = _DATE_CTX + """You are a macro intelligence analyst. You have been given:
 1. A list of topics that were discussed in our internal newsletter over the past week
 2. A list of topics discussed by external interview guests over the past week
 3. A comprehensive checklist of macro topics that SHOULD be monitored

@@ -23,11 +23,13 @@ from ..llm.router import LLMRouter
 from ..analysis.classical_reference import (
     CLASSICAL_DOMAINS, ALL_PRINCIPLES, format_principles_for_llm
 )
+from ..llm.date_context import get_date_context
 
 logger = logging.getLogger(__name__)
 
+_DATE_CTX = get_date_context()
 
-RANKING_SYSTEM = """You are a classically trained macro analyst ranking analytical frameworks.
+RANKING_SYSTEM = _DATE_CTX + """You are a classically trained macro analyst ranking analytical frameworks.
 
 Your ranking criteria is grounded in FIRST PRINCIPLES, not empirical track records.
 A framework that predicted correctly but reasons from flawed premises is ranked LOWER

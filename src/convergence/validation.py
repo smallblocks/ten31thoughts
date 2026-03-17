@@ -16,11 +16,13 @@ from ..db.models import (
     FeedCategory, PredictionStatus, ConvictionLevel, gen_id
 )
 from ..llm.router import LLMRouter
+from ..llm.date_context import get_date_context
 
 logger = logging.getLogger(__name__)
 
+_DATE_CTX = get_date_context()
 
-VALIDATION_SYSTEM = """You are a prediction accuracy analyst. Given a prediction that was made
+VALIDATION_SYSTEM = _DATE_CTX + """You are a prediction accuracy analyst. Given a prediction that was made
 on a specific date, and your knowledge of what actually happened in the macro landscape
 since then, determine whether the prediction was validated, invalidated, or is still pending.
 

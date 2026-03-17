@@ -20,11 +20,13 @@ from .classical_reference import (
     get_principles_for_topic, format_principles_for_llm,
     TOPIC_TO_DOMAINS,
 )
+from ..llm.date_context import get_date_context
 
 logger = logging.getLogger(__name__)
 
+_DATE_CTX = get_date_context()
 
-EVALUATION_SYSTEM = """You are a classically trained macro analyst. Your role is to evaluate
+EVALUATION_SYSTEM = _DATE_CTX + """You are a classically trained macro analyst. Your role is to evaluate
 analytical frameworks against FIRST PRINCIPLES drawn from the Western intellectual tradition:
 sound money theory, political cycle analysis, the study of human nature and incentives,
 and the foundations of property rights and rule of law.

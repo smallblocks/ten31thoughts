@@ -17,11 +17,13 @@ from ..db.models import (
     FeedCategory, gen_id
 )
 from ..llm.router import LLMRouter
+from ..llm.date_context import get_date_context
 
 logger = logging.getLogger(__name__)
 
+_DATE_CTX = get_date_context()
 
-THREADING_SYSTEM = """You are analyzing a series of thesis elements (positions/claims)
+THREADING_SYSTEM = _DATE_CTX + """You are analyzing a series of thesis elements (positions/claims)
 from a newsletter, ordered chronologically. Your job is to identify which elements
 are part of the SAME evolving narrative thread.
 
