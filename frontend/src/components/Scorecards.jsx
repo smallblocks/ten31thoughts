@@ -1,0 +1,383 @@
+import React, { useState, useEffect } from 'react'
+
+function GradeChip({ grade }) {
+  if (!grade) return null
+  const colors = {
+    'A': 'bg-emerald-900/50 text-emerald-300 border-emerald-700',
+    'A-': 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
+    'B+': 'bg-blue-900/40 text-blue-300 border-blue-800',
+    'B': 'bg-blue-900/30 text-blue-300 border-blue-800',
+    'B-': 'bg-blue-900/20 text-blue-400 border-blue-900',
+    'C+': 'bg-amber-900/30 text-amber-300 border-amber-800',
+    'C': 'bg-amber-900/20 text-amber-400 border-amber-900',
+    'D': 'bg-red-900/30 text-red-300 border-red-800',
+    'F': 'bg-red-900/50 text-red-200 border-red-700',
+  }
+  return (
+    <span className={`inline-block text-xs font-mono font-bold px-2 py-0.5 rounded border ${colors[grade] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>
+      {grade}
+    </span>
+  )
+}
+
+function AlignmentChip({ alignment }) {
+  const colors = {
+    agree: 'bg-emerald-900/40 text-emerald-300',
+    partial: 'bg-amber-900/40 text-amber-300',
+    diverge: 'bg-red-900/40 text-red-300',
+    unrelated: 'bg-gray-800 text-gray-500',
+  }
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded ${colors[alignment] || colors.unrelated}`}>
+      {alignment}
+    </span>
+  )
+}
+
+function TrendArrow({ trend }) {
+  if (trend === 'improving') return <span className="text-emerald-400 text-xs">↑ improving</span>
+  if (trend === 'declining') return <span className="text-red-400 text-xs">↓ declining</span>
+  return <span className="text-gray-500 text-xs">— stable</span>
+}
+
+function ScoreBar({ score, small }) {
+  if (score == null) return <span className="text-xs text-gray-600">—</span>
+  const pct = Math.round(score * 100)
+  const h = small ? 'h-1' : 'h-1.5'
+  return (
+    <div className="flex items-center gap-2">
+      <div className={`flex-1 ${h} bg-gray-800 rounded-full`}>
+        <div className={`${h} bg-brand-accent rounded-full`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs text-gray-400 font-mono w-8 text-right">{pct}%</span>
+    </div>
+  )
+}
+
+function PredictionReceipt({ pred }) {
+  const statusColors = {
+    validated: 'text-emerald-400',
+    invalidated: 'text-red-400',
+    partially_validated: 'text-amber-400',
+    pending: 'text-gray-400',
+    expired: 'text-gray-600',
+  }
+  const statusIcon = {
+    validated: '✓',
+    invalidated: '✗',
+    partially_validated: '~',
+    pending: '○',
+    expired: '—',
+  }
+
+  return (
+    <div className="border border-gray-800 rounded-lg p-3 bg-gray-900/20">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <p className="text-sm text-gray-200 flex-1">{pred.prediction || pred.claim}</p>
+        <span className={`text-sm font-mono font-bold ${statusColors[pred.status] || 'text-gray-500'}`}>
+          {statusIcon[pred.status] || '?'} {(pred.status || 'pending').toUpperCase()}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+        {pred.episode && <span>Episode: <span className="text-gray-300">{pred.episode}</span></span>}
+        {pred.date && <span>Called: <span className="text-gray-300">{new Date(pred.date).toLocaleDateString()}</span></span>}
+        {pred.horizon && <span>Horizon: <span className="text-gray-300">{pred.horizon}</span></span>}
+      </div>
+
+      {/* Market link */}
+      {pred.market_title && (
+        <div className="mt-2 border-t border-gray-800 pt-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500">
+              Market: <a href={pred.market_url} target="_blank" rel="noopener noreferrer"
+                className="text-brand-accent hover:underline">{pred.market_title}</a>
+            </span>
+            <span className="text-gray-500">
+              {pred.platform && <span className="uppercase mr-2">{pred.platform}</span>}
+              {pred.market_result && (
+                <span className={pred.correct ? 'text-emerald-400' : 'text-red-400'}>
+                  Resolved: {pred.market_result.toUpperCase()}
+                </span>
+              )}
+              {!pred.market_result && pred.market_probability != null && (
+                <span>Market: {Math.round(pred.market_probability * 100)}%</span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ─── Main Component ───
+
+export default function Scorecards() {
+  const [guests, setGuests] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [scorecard, setScorecard] = useState(null)
+  const [marketLinks, setMarketLinks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  useEffect(() => { loadGuests() }, [])
+
+  async function loadGuests() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/episodes/guests?min_appearances=1')
+      if (res.ok) setGuests(await res.json())
+    } catch (e) {
+      console.error('Failed to load guests:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadScorecard(name) {
+    setSelected(name)
+    setDetailLoading(true)
+    setScorecard(null)
+    setMarketLinks([])
+
+    try {
+      const [scRes, mkRes] = await Promise.all([
+        fetch(`/api/episodes/guests/${encodeURIComponent(name)}/scorecard`),
+        fetch(`/api/markets/links?limit=100`),
+      ])
+
+      if (scRes.ok) setScorecard(await scRes.json())
+
+      if (mkRes.ok) {
+        const allLinks = await mkRes.json()
+        // Filter to this guest's predictions
+        const guestLinks = allLinks.filter(l =>
+          l.prediction && l.prediction.toLowerCase().includes(name.toLowerCase())
+        )
+        setMarketLinks(guestLinks)
+      }
+    } catch (e) {
+      console.error('Failed to load scorecard:', e)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  if (loading) return <div className="p-6 text-gray-400">Loading scorecards...</div>
+
+  // ─── Guest detail view ───
+  if (selected && scorecard) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto overflow-y-auto h-full">
+        {/* Back button */}
+        <button onClick={() => { setSelected(null); setScorecard(null) }}
+          className="text-sm text-gray-400 hover:text-white mb-4 flex items-center gap-1">
+          ← All Guests
+        </button>
+
+        {/* Header */}
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-semibold text-white">{scorecard.guest_name}</h2>
+            <p className="text-sm text-gray-400">
+              {scorecard.total_appearances} appearances · {scorecard.total_frameworks} frameworks
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="flex items-center gap-2 justify-end">
+              <GradeChip grade={scorecard.reasoning_grade} />
+              <TrendArrow trend={scorecard.trend} />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Avg: {scorecard.avg_first_principles_score != null ? (scorecard.avg_first_principles_score * 100).toFixed(0) + '%' : 'N/A'}
+              {scorecard.best_score != null && <> · Best: {(scorecard.best_score * 100).toFixed(0)}%</>}
+              {scorecard.worst_score != null && <> · Worst: {(scorecard.worst_score * 100).toFixed(0)}%</>}
+            </p>
+          </div>
+        </div>
+
+        {/* Thesis alignment distribution */}
+        {scorecard.thesis_alignment_distribution && (
+          <div className="grid grid-cols-4 gap-2 mb-6">
+            {Object.entries(scorecard.thesis_alignment_distribution).map(([key, val]) => (
+              <div key={key} className="bg-gray-900/50 border border-gray-800 rounded-lg p-2 text-center">
+                <div className="text-lg font-semibold text-white">{val}</div>
+                <div className="text-xs text-gray-500">{key}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Domain strengths/weaknesses */}
+        {(scorecard.strongest_domains?.length > 0 || scorecard.weakest_domains?.length > 0) && (
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {scorecard.strongest_domains?.length > 0 && (
+              <div>
+                <h4 className="text-xs font-medium text-emerald-400 uppercase tracking-wider mb-2">Strongest Domains</h4>
+                {scorecard.strongest_domains.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs py-1">
+                    <span className="text-gray-300">{d.title}</span>
+                    <span className="text-emerald-400 font-mono">{(d.avg_score * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {scorecard.weakest_domains?.length > 0 && (
+              <div>
+                <h4 className="text-xs font-medium text-red-400 uppercase tracking-wider mb-2">Weakest Domains</h4>
+                {scorecard.weakest_domains.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs py-1">
+                    <span className="text-gray-300">{d.title}</span>
+                    <span className="text-red-400 font-mono">{(d.avg_score * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Score trend — every appearance */}
+        <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">Appearances</h3>
+        <div className="space-y-2 mb-8">
+          {(scorecard.score_trend || []).map((entry, i) => (
+            <div key={i} className="border border-gray-800 rounded-lg p-3 bg-gray-900/20 hover:bg-gray-900/40 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <GradeChip grade={entry.reasoning_grade} />
+                  <span className="text-sm text-white">{entry.framework}</span>
+                </div>
+                <AlignmentChip alignment={entry.thesis_alignment} />
+              </div>
+              <div className="flex items-center justify-between">
+                <a href={entry.url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-gray-400 hover:text-brand-accent truncate max-w-md">
+                  {entry.episode}
+                </a>
+                <span className="text-xs text-gray-600">
+                  {entry.date ? new Date(entry.date).toLocaleDateString() : ''}
+                </span>
+              </div>
+              {entry.first_principles_score != null && (
+                <div className="mt-2">
+                  <ScoreBar score={entry.first_principles_score} small />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Predictions with market receipts */}
+        {(scorecard.predictions?.length > 0 || marketLinks.length > 0) && (
+          <>
+            <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">
+              Predictions & Receipts
+            </h3>
+            <div className="space-y-2 mb-8">
+              {/* Market-linked predictions first */}
+              {marketLinks.map((ml, i) => (
+                <PredictionReceipt key={`ml-${i}`} pred={{
+                  prediction: ml.prediction,
+                  status: ml.market_result ? (ml.market_result === ml.our_side ? 'validated' : 'invalidated') : 'pending',
+                  market_title: ml.market_title,
+                  market_url: ml.market_url,
+                  platform: ml.platform,
+                  market_result: ml.market_result,
+                  market_probability: ml.current_price,
+                  correct: ml.market_result === ml.our_side,
+                }} />
+              ))}
+              {/* Non-market predictions */}
+              {(scorecard.predictions || []).map((p, i) => (
+                <PredictionReceipt key={`p-${i}`} pred={p} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Best and worst frameworks */}
+        {scorecard.best_frameworks?.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium text-emerald-400 uppercase tracking-wider mb-3">Best Frameworks</h3>
+            {scorecard.best_frameworks.map((fw, i) => (
+              <div key={i} className="border border-gray-800 rounded-lg p-3 bg-gray-900/20 mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-white font-medium">{fw.name}</span>
+                  <span className="text-xs text-emerald-400 font-mono">{fw.score != null ? (fw.score * 100).toFixed(0) + '%' : ''}</span>
+                </div>
+                <p className="text-xs text-gray-400">{fw.description}</p>
+              </div>
+            ))}
+          </>
+        )}
+
+        {scorecard.weakest_frameworks?.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium text-red-400 uppercase tracking-wider mb-3 mt-4">Weakest Frameworks</h3>
+            {scorecard.weakest_frameworks.map((fw, i) => (
+              <div key={i} className="border border-gray-800 rounded-lg p-3 bg-gray-900/20 mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-white font-medium">{fw.name}</span>
+                  <span className="text-xs text-red-400 font-mono">{fw.score != null ? (fw.score * 100).toFixed(0) + '%' : ''}</span>
+                </div>
+                <p className="text-xs text-gray-400">{fw.description}</p>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Detail loading state ───
+  if (selected && detailLoading) {
+    return <div className="p-6 text-gray-400">Loading scorecard for {selected}...</div>
+  }
+
+  // ─── Guest leaderboard ───
+  return (
+    <div className="p-6 max-w-4xl mx-auto overflow-y-auto h-full">
+      <div className="mb-6">
+        <h2 className="text-lg font-medium text-white">Guest Scorecards</h2>
+        <p className="text-sm text-gray-500">
+          Every guest ranked by first-principles reasoning score. Click to verify.
+        </p>
+      </div>
+
+      {guests.length === 0 ? (
+        <div className="text-center py-12">
+          <span className="text-3xl mb-3 block">📊</span>
+          <p className="text-sm text-gray-400">No guest data yet. Scorecards populate after content is analyzed.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {guests.map((g, i) => (
+            <button key={g.guest_name} onClick={() => loadScorecard(g.guest_name)}
+              className="w-full text-left border border-gray-800 rounded-lg p-4 bg-gray-900/20 hover:bg-gray-900/50 hover:border-gray-700 transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600 font-mono text-xs w-6">#{i + 1}</span>
+                  <span className="text-white font-medium">{g.guest_name}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <GradeChip grade={g.reasoning_grade} />
+                  <span className="text-xs text-gray-500">
+                    {g.appearances} appearance{g.appearances !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+              <ScoreBar score={g.avg_first_principles_score} />
+              {g.consistency != null && (
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>Range: {(g.worst_score * 100).toFixed(0)}% – {(g.best_score * 100).toFixed(0)}%</span>
+                  <span>Consistency: {g.consistency < 0.15 ? 'High' : g.consistency < 0.3 ? 'Medium' : 'Low'}</span>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
