@@ -200,7 +200,9 @@ export default function Scorecards() {
   // Filtered + sorted guests
   const filteredGuests = useMemo(() => {
     let list = guests
-    if (search.trim()) {
+    const isSearching = search.trim().length > 0
+    
+    if (isSearching) {
       const q = search.toLowerCase()
       list = list.filter(g =>
         g.guest_name.toLowerCase().includes(q) ||
@@ -208,8 +210,13 @@ export default function Scorecards() {
         (g.x_handle || '').toLowerCase().includes(q)
       )
     }
+    
     const sortOpt = SORT_OPTIONS.find(s => s.id === sortBy)
     if (sortOpt) list = [...list].sort(sortOpt.fn)
+    
+    // Show top 10 unless searching
+    if (!isSearching) list = list.slice(0, 10)
+    
     return list
   }, [guests, search, sortBy])
 
@@ -454,8 +461,11 @@ export default function Scorecards() {
 
       {/* Results count */}
       <p className="text-xs text-gray-600 mb-3">
-        {filteredGuests.length} guest{filteredGuests.length !== 1 ? 's' : ''}
-        {search && ` matching "${search}"`}
+        {search ? (
+          <>{filteredGuests.length} guest{filteredGuests.length !== 1 ? 's' : ''} matching "{search}"</>
+        ) : (
+          <>Top 10 of {guests.length} guests · <span className="text-gray-500">search to find others</span></>
+        )}
       </p>
 
       {filteredGuests.length === 0 ? (
