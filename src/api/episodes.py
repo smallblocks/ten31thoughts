@@ -359,6 +359,8 @@ def list_all_guests(
             "linkedin_url": profile.linkedin_url if profile else None,
             "website_url": profile.website_url if profile else None,
             "bio": profile.bio if profile else None,
+            "elo_rating": round(profile.elo_rating, 1) if profile and profile.elo_rating else None,
+            "elo_predictions_counted": profile.elo_predictions_counted if profile else 0,
         })
     return results
 
@@ -608,6 +610,11 @@ def get_guest_scorecard(
         "linkedin_url": profile.linkedin_url if profile else None,
         "website_url": profile.website_url if profile else None,
         "bio": profile.bio if profile else None,
+        "elo_rating": round(profile.elo_rating, 1) if profile and profile.elo_rating else 1500.0,
+        "elo_peak": round(profile.elo_peak, 1) if profile and profile.elo_peak else 1500.0,
+        "elo_floor": round(profile.elo_floor, 1) if profile and profile.elo_floor else 1500.0,
+        "elo_predictions_counted": profile.elo_predictions_counted if profile else 0,
+        "elo_history": (profile.elo_history or []) if profile else [],
         "total_appearances": len(set(fw.item_id for fw, _, _, _ in frameworks)),
         "total_frameworks": len(frameworks),
 

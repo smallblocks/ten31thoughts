@@ -281,7 +281,7 @@ class PredictionMarketLink(Base):
 
 
 class GuestProfile(Base):
-    """Profile metadata for external guests — social links, bio, etc."""
+    """Profile metadata for external guests — social links, bio, ELO rating."""
     __tablename__ = "guest_profiles"
 
     guest_name = Column(String, primary_key=True)
@@ -292,6 +292,12 @@ class GuestProfile(Base):
     bio = Column(Text, nullable=True)  # short bio/title
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
+    # ELO rating fields
+    elo_rating = Column(Float, default=1500.0)  # starting ELO like chess
+    elo_peak = Column(Float, default=1500.0)
+    elo_floor = Column(Float, default=1500.0)
+    elo_predictions_counted = Column(Integer, default=0)
+    elo_history = Column(JSON, default=list)  # list of {date, rating, delta, prediction, market_price, outcome}
 
 
 # ─── Database Setup ───

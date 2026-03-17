@@ -10,11 +10,12 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 
-from ..db.models import PredictionMarketLink, ThesisElement, ExternalFramework, gen_id
+from ..db.models import PredictionMarketLink, ThesisElement, ExternalFramework, GuestProfile, gen_id
 from ..db.session import get_db
 from ..llm.router import LLMRouter
 from ..markets.matcher import PredictionMarketMatcher
 from ..markets.resolver import MarketResolver
+from ..markets.elo import ELOCalculator, compute_elo_delta
 
 logger = logging.getLogger(__name__)
 
@@ -272,4 +273,79 @@ def get_market_dashboard(session: Session = Depends(get_db)):
         },
         "active_predictions": active,
         "resolved_predictions": resolved,
+    }
+
+
+# ─── ELO Rating Endpoints ───
+
+@router.get("/elo/leaderboard")
+def get_elo_leaderboard(session: Session = Depends(get_db)):
+    """
+    ELO leaderboard — guests ranked by conviction-weighted prediction accuracy.
+
+    Higher ELO = better at making contrarian calls that turn out right.
+    Market price at time of call determines difficulty:
+    - Calling against 80% consensus and being right = huge ELO gain
+    - Calling with 90% consensus and being wrong = massive ELO loss
+    """
+    calc = ELOCalculator(session)
+    return calc.get_leaderboard()
+
+
+@router.get("/elo/guest/{guest_name}")
+def get_guest_elo_history(
+    guest_name: str,
+    session: Session = Depends(get_db),
+):
+    """Full ELO history for a specific guest — every rated prediction with market context."""
+    profile = session.get(GuestProfile, guest_name)
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"No profile for: {guest_name}")
+
+    history = profile.elo_history or []
+
+    return {
+        "guest_name": guest_name,
+        "display_name": profile.display_name,
+        "current_elo": round(profile.elo_rating, 1) if profile.elo_rating else 1500.0,
+        "peak": round(profile.elo_peak, 1) if profile.elo_peak else 1500.0,
+        "floor": round(profile.elo_floor, 1) if profile.elo_floor else 1500.0,
+        "predictions_counted": profile.elo_predictions_counted or 0,
+        "history": history,
+    }
+
+
+@router.post("/elo/recalculate")
+def recalculate_all_elo(session: Session = Depends(get_db)):
+    """Rebuild all ELO ratings from scratch using all resolved market links."""
+    calc = ELOCalculator(session)
+    return calc.recalculate_all()
+
+
+@router.get("/elo/explain")
+def explain_elo():
+    """Explain how the ELO system works — useful for UI tooltips."""
+    return {
+        "system": "Conviction-Weighted ELO",
+        "starting_rating": 1500,
+        "k_factor": 40,
+        "conviction_multipliers": {
+            "strong": "1.5x (you put your reputation on it)",
+            "moderate": "1.0x (standard call)",
+            "speculative": "0.7x (hedged call, less reward/punishment)",
+        },
+        "how_it_works": {
+            "market_price_is_difficulty": "The Polymarket/Kalshi price at time of call determines expected outcome",
+            "contrarian_correct": "Calling against 80% consensus and being right = +32 ELO (huge gain)",
+            "consensus_correct": "Calling with 90% consensus and being right = +4 ELO (tiny gain, no alpha)",
+            "contrarian_wrong": "Calling against 80% consensus and being wrong = -8 ELO (small loss, you swung big)",
+            "consensus_wrong": "Calling with 90% consensus and being wrong = -36 ELO (massive loss, confidently wrong)",
+        },
+        "interpretation": {
+            "1700+": "Elite contrarian caller — consistently sees what the crowd doesn't",
+            "1550-1700": "Above average — adds genuine signal beyond market consensus",
+            "1450-1550": "Market-rate — roughly as good as flipping a coin weighted by consensus",
+            "1300-1450": "Below average — frequently wrong on consensus calls",
+            "below 1300": "Consistently wrong, especially on high-confidence calls — potential fade signal",
+        },
     }

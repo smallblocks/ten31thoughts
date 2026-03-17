@@ -80,6 +80,24 @@ function SocialLinks({ x_handle, linkedin_url, website_url }) {
   )
 }
 
+function ELOBadge({ rating, count }) {
+  if (!rating || !count) return null
+  const r = Math.round(rating)
+  let color = 'text-gray-400 border-gray-700'
+  if (r >= 1700) color = 'text-amber-300 border-amber-600 bg-amber-950/30'
+  else if (r >= 1550) color = 'text-emerald-300 border-emerald-700 bg-emerald-950/20'
+  else if (r >= 1450) color = 'text-gray-300 border-gray-600'
+  else if (r >= 1300) color = 'text-orange-300 border-orange-700 bg-orange-950/20'
+  else color = 'text-red-300 border-red-700 bg-red-950/20'
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded border ${color}`}
+      title={`ELO rating based on ${count} market-resolved prediction${count !== 1 ? 's' : ''}`}>
+      ⚡ {r}
+    </span>
+  )
+}
+
 function PredictionReceipt({ pred }) {
   const statusColors = {
     validated: 'text-emerald-400', invalidated: 'text-red-400',
@@ -124,6 +142,8 @@ function PredictionReceipt({ pred }) {
 const SORT_OPTIONS = [
   { id: 'score_desc', label: 'Score ↓', fn: (a, b) => (b.avg_first_principles_score || 0) - (a.avg_first_principles_score || 0) },
   { id: 'score_asc', label: 'Score ↑', fn: (a, b) => (a.avg_first_principles_score || 0) - (b.avg_first_principles_score || 0) },
+  { id: 'elo_desc', label: 'ELO ↓', fn: (a, b) => (b.elo_rating || 1500) - (a.elo_rating || 1500) },
+  { id: 'elo_asc', label: 'ELO ↑', fn: (a, b) => (a.elo_rating || 1500) - (b.elo_rating || 1500) },
   { id: 'appearances', label: 'Appearances', fn: (a, b) => b.appearances - a.appearances },
   { id: 'consistency', label: 'Consistency', fn: (a, b) => (a.consistency || 1) - (b.consistency || 1) },
   { id: 'name', label: 'Name A-Z', fn: (a, b) => a.guest_name.localeCompare(b.guest_name) },
@@ -227,6 +247,7 @@ export default function Scorecards() {
           <div className="text-right">
             <div className="flex items-center gap-2 justify-end">
               <GradeChip grade={scorecard.reasoning_grade} />
+              <ELOBadge rating={scorecard.elo_rating} count={scorecard.elo_predictions_counted} />
               <TrendArrow trend={scorecard.trend} />
             </div>
             <p className="text-xs text-gray-500 mt-1">
@@ -322,6 +343,44 @@ export default function Scorecards() {
               {(scorecard.predictions || []).map((p, i) => (
                 <PredictionReceipt key={`p-${i}`} pred={p} />
               ))}
+            </div>
+          </>
+        )}
+
+        {/* ELO History */}
+        {scorecard.elo_history?.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">
+              ELO History
+              <span className="ml-2 text-xs text-gray-500 font-normal normal-case">
+                Conviction-weighted — contrarian correct calls earn more
+              </span>
+            </h3>
+            <div className="space-y-1 mb-8">
+              {[...scorecard.elo_history].reverse().map((h, i) => {
+                const deltaColor = h.delta > 0 ? 'text-emerald-400' : h.delta < 0 ? 'text-red-400' : 'text-gray-500'
+                const marketPct = Math.round((h.market_price_our_side || 0) * 100)
+                const contrarian = marketPct < 40
+                return (
+                  <div key={i} className="flex items-center gap-3 text-xs border border-gray-800/50 rounded px-3 py-2">
+                    <span className={`font-mono font-bold w-12 ${deltaColor}`}>
+                      {h.delta > 0 ? '+' : ''}{h.delta?.toFixed(1)}
+                    </span>
+                    <span className="font-mono text-gray-400 w-16">
+                      {h.old_rating?.toFixed(0)} → {h.new_rating?.toFixed(0)}
+                    </span>
+                    <span className={h.correct ? 'text-emerald-400' : 'text-red-400'}>
+                      {h.correct ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300 flex-1 truncate">{h.prediction}</span>
+                    <span className="text-gray-500">
+                      {h.our_side?.toUpperCase()} @ {marketPct}%
+                      {contrarian && <span className="ml-1 text-amber-400" title="Contrarian call">⚡</span>}
+                    </span>
+                    <span className="text-gray-600 uppercase text-[10px]">{h.platform}</span>
+                  </div>
+                )
+              })}
             </div>
           </>
         )}
@@ -422,6 +481,7 @@ export default function Scorecards() {
                 </div>
                 <div className="flex items-center gap-3">
                   <GradeChip grade={g.reasoning_grade} />
+                  <ELOBadge rating={g.elo_rating} count={g.elo_predictions_counted} />
                   <span className="text-xs text-gray-500">
                     {g.appearances} ep{g.appearances !== 1 ? 's' : ''}
                   </span>

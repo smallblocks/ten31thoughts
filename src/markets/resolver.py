@@ -230,6 +230,14 @@ class MarketResolver:
                     f"via {link.platform} market {link.market_id}"
                 )
 
+        # Update ELO rating
+        try:
+            from .elo import ELOCalculator
+            calc = ELOCalculator(self.session)
+            calc.process_new_resolution(link)
+        except Exception as e:
+            logger.warning(f"ELO update failed for {link.link_id}: {e}")
+
     def update_prices(self) -> dict:
         """
         Update current prices for all open market links.
