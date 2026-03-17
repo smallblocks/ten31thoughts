@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 
 function GradeChip({ grade }) {
   if (!grade) return null
@@ -54,65 +54,80 @@ function ScoreBar({ score, small }) {
   )
 }
 
+function SocialLinks({ x_handle, linkedin_url, website_url }) {
+  if (!x_handle && !linkedin_url && !website_url) return null
+  return (
+    <div className="flex items-center gap-2">
+      {x_handle && (
+        <a href={`https://x.com/${x_handle}`} target="_blank" rel="noopener noreferrer"
+          className="text-xs text-gray-500 hover:text-white transition-colors" title={`@${x_handle}`}>
+          𝕏
+        </a>
+      )}
+      {linkedin_url && (
+        <a href={linkedin_url} target="_blank" rel="noopener noreferrer"
+          className="text-xs text-gray-500 hover:text-blue-400 transition-colors" title="LinkedIn">
+          in
+        </a>
+      )}
+      {website_url && (
+        <a href={website_url} target="_blank" rel="noopener noreferrer"
+          className="text-xs text-gray-500 hover:text-brand-accent transition-colors" title="Website">
+          🔗
+        </a>
+      )}
+    </div>
+  )
+}
+
 function PredictionReceipt({ pred }) {
   const statusColors = {
-    validated: 'text-emerald-400',
-    invalidated: 'text-red-400',
-    partially_validated: 'text-amber-400',
-    pending: 'text-gray-400',
-    expired: 'text-gray-600',
+    validated: 'text-emerald-400', invalidated: 'text-red-400',
+    partially_validated: 'text-amber-400', pending: 'text-gray-400', expired: 'text-gray-600',
   }
   const statusIcon = {
-    validated: '✓',
-    invalidated: '✗',
-    partially_validated: '~',
-    pending: '○',
-    expired: '—',
+    validated: '✓', invalidated: '✗', partially_validated: '~', pending: '○', expired: '—',
   }
 
   return (
     <div className="border border-gray-800 rounded-lg p-3 bg-gray-900/20">
       <div className="flex items-start justify-between gap-3 mb-2">
         <p className="text-sm text-gray-200 flex-1">{pred.prediction || pred.claim}</p>
-        <span className={`text-sm font-mono font-bold ${statusColors[pred.status] || 'text-gray-500'}`}>
+        <span className={`text-sm font-mono font-bold shrink-0 ${statusColors[pred.status] || 'text-gray-500'}`}>
           {statusIcon[pred.status] || '?'} {(pred.status || 'pending').toUpperCase()}
         </span>
       </div>
-
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
         {pred.episode && <span>Episode: <span className="text-gray-300">{pred.episode}</span></span>}
         {pred.date && <span>Called: <span className="text-gray-300">{new Date(pred.date).toLocaleDateString()}</span></span>}
-        {pred.horizon && <span>Horizon: <span className="text-gray-300">{pred.horizon}</span></span>}
       </div>
-
-      {/* Market link */}
       {pred.market_title && (
-        <div className="mt-2 border-t border-gray-800 pt-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">
-              Market: <a href={pred.market_url} target="_blank" rel="noopener noreferrer"
-                className="text-brand-accent hover:underline">{pred.market_title}</a>
-            </span>
-            <span className="text-gray-500">
-              {pred.platform && <span className="uppercase mr-2">{pred.platform}</span>}
-              {pred.market_result && (
-                <span className={pred.correct ? 'text-emerald-400' : 'text-red-400'}>
-                  Resolved: {pred.market_result.toUpperCase()}
-                </span>
-              )}
-              {!pred.market_result && pred.market_probability != null && (
-                <span>Market: {Math.round(pred.market_probability * 100)}%</span>
-              )}
-            </span>
-          </div>
+        <div className="mt-2 border-t border-gray-800 pt-2 flex items-center justify-between text-xs">
+          <a href={pred.market_url} target="_blank" rel="noopener noreferrer"
+            className="text-brand-accent hover:underline">{pred.market_title}</a>
+          <span className="text-gray-500">
+            {pred.platform && <span className="uppercase mr-2">{pred.platform}</span>}
+            {pred.market_result ? (
+              <span className={pred.correct ? 'text-emerald-400' : 'text-red-400'}>
+                Resolved: {pred.market_result.toUpperCase()}
+              </span>
+            ) : pred.market_probability != null ? (
+              <span>Market: {Math.round(pred.market_probability * 100)}%</span>
+            ) : null}
+          </span>
         </div>
       )}
     </div>
   )
 }
 
-
-// ─── Main Component ───
+const SORT_OPTIONS = [
+  { id: 'score_desc', label: 'Score ↓', fn: (a, b) => (b.avg_first_principles_score || 0) - (a.avg_first_principles_score || 0) },
+  { id: 'score_asc', label: 'Score ↑', fn: (a, b) => (a.avg_first_principles_score || 0) - (b.avg_first_principles_score || 0) },
+  { id: 'appearances', label: 'Appearances', fn: (a, b) => b.appearances - a.appearances },
+  { id: 'consistency', label: 'Consistency', fn: (a, b) => (a.consistency || 1) - (b.consistency || 1) },
+  { id: 'name', label: 'Name A-Z', fn: (a, b) => a.guest_name.localeCompare(b.guest_name) },
+]
 
 export default function Scorecards() {
   const [guests, setGuests] = useState([])
@@ -121,6 +136,10 @@ export default function Scorecards() {
   const [marketLinks, setMarketLinks] = useState([])
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
+
+  // Filters
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('score_desc')
 
   useEffect(() => { loadGuests() }, [])
 
@@ -141,22 +160,15 @@ export default function Scorecards() {
     setDetailLoading(true)
     setScorecard(null)
     setMarketLinks([])
-
     try {
       const [scRes, mkRes] = await Promise.all([
         fetch(`/api/episodes/guests/${encodeURIComponent(name)}/scorecard`),
         fetch(`/api/markets/links?limit=100`),
       ])
-
       if (scRes.ok) setScorecard(await scRes.json())
-
       if (mkRes.ok) {
         const allLinks = await mkRes.json()
-        // Filter to this guest's predictions
-        const guestLinks = allLinks.filter(l =>
-          l.prediction && l.prediction.toLowerCase().includes(name.toLowerCase())
-        )
-        setMarketLinks(guestLinks)
+        setMarketLinks(allLinks.filter(l => l.prediction))
       }
     } catch (e) {
       console.error('Failed to load scorecard:', e)
@@ -165,13 +177,28 @@ export default function Scorecards() {
     }
   }
 
+  // Filtered + sorted guests
+  const filteredGuests = useMemo(() => {
+    let list = guests
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(g =>
+        g.guest_name.toLowerCase().includes(q) ||
+        (g.bio || '').toLowerCase().includes(q) ||
+        (g.x_handle || '').toLowerCase().includes(q)
+      )
+    }
+    const sortOpt = SORT_OPTIONS.find(s => s.id === sortBy)
+    if (sortOpt) list = [...list].sort(sortOpt.fn)
+    return list
+  }, [guests, search, sortBy])
+
   if (loading) return <div className="p-6 text-gray-400">Loading scorecards...</div>
 
   // ─── Guest detail view ───
   if (selected && scorecard) {
     return (
       <div className="p-6 max-w-4xl mx-auto overflow-y-auto h-full">
-        {/* Back button */}
         <button onClick={() => { setSelected(null); setScorecard(null) }}
           className="text-sm text-gray-400 hover:text-white mb-4 flex items-center gap-1">
           ← All Guests
@@ -180,8 +207,20 @@ export default function Scorecards() {
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-white">{scorecard.guest_name}</h2>
-            <p className="text-sm text-gray-400">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-white">
+                {scorecard.display_name || scorecard.guest_name}
+              </h2>
+              <SocialLinks
+                x_handle={scorecard.x_handle}
+                linkedin_url={scorecard.linkedin_url}
+                website_url={scorecard.website_url}
+              />
+            </div>
+            {scorecard.bio && (
+              <p className="text-sm text-gray-400 mt-0.5">{scorecard.bio}</p>
+            )}
+            <p className="text-sm text-gray-500 mt-1">
               {scorecard.total_appearances} appearances · {scorecard.total_frameworks} frameworks
             </p>
           </div>
@@ -198,7 +237,7 @@ export default function Scorecards() {
           </div>
         </div>
 
-        {/* Thesis alignment distribution */}
+        {/* Thesis alignment */}
         {scorecard.thesis_alignment_distribution && (
           <div className="grid grid-cols-4 gap-2 mb-6">
             {Object.entries(scorecard.thesis_alignment_distribution).map(([key, val]) => (
@@ -238,7 +277,7 @@ export default function Scorecards() {
           </div>
         )}
 
-        {/* Score trend — every appearance */}
+        {/* Appearances timeline */}
         <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">Appearances</h3>
         <div className="space-y-2 mb-8">
           {(scorecard.score_trend || []).map((entry, i) => (
@@ -260,35 +299,26 @@ export default function Scorecards() {
                 </span>
               </div>
               {entry.first_principles_score != null && (
-                <div className="mt-2">
-                  <ScoreBar score={entry.first_principles_score} small />
-                </div>
+                <div className="mt-2"><ScoreBar score={entry.first_principles_score} small /></div>
               )}
             </div>
           ))}
         </div>
 
-        {/* Predictions with market receipts */}
+        {/* Predictions with receipts */}
         {(scorecard.predictions?.length > 0 || marketLinks.length > 0) && (
           <>
-            <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">
-              Predictions & Receipts
-            </h3>
+            <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">Predictions & Receipts</h3>
             <div className="space-y-2 mb-8">
-              {/* Market-linked predictions first */}
               {marketLinks.map((ml, i) => (
                 <PredictionReceipt key={`ml-${i}`} pred={{
-                  prediction: ml.prediction,
-                  status: ml.market_result ? (ml.market_result === ml.our_side ? 'validated' : 'invalidated') : 'pending',
-                  market_title: ml.market_title,
-                  market_url: ml.market_url,
-                  platform: ml.platform,
-                  market_result: ml.market_result,
-                  market_probability: ml.current_price,
+                  prediction: ml.prediction, market_title: ml.market_title,
+                  market_url: ml.market_url, platform: ml.platform,
+                  market_result: ml.market_result, market_probability: ml.current_price,
                   correct: ml.market_result === ml.our_side,
+                  status: ml.market_result ? (ml.market_result === ml.our_side ? 'validated' : 'invalidated') : 'pending',
                 }} />
               ))}
-              {/* Non-market predictions */}
               {(scorecard.predictions || []).map((p, i) => (
                 <PredictionReceipt key={`p-${i}`} pred={p} />
               ))}
@@ -296,13 +326,13 @@ export default function Scorecards() {
           </>
         )}
 
-        {/* Best and worst frameworks */}
+        {/* Best/worst frameworks */}
         {scorecard.best_frameworks?.length > 0 && (
           <>
             <h3 className="text-sm font-medium text-emerald-400 uppercase tracking-wider mb-3">Best Frameworks</h3>
             {scorecard.best_frameworks.map((fw, i) => (
               <div key={i} className="border border-gray-800 rounded-lg p-3 bg-gray-900/20 mb-2">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex justify-between mb-1">
                   <span className="text-sm text-white font-medium">{fw.name}</span>
                   <span className="text-xs text-emerald-400 font-mono">{fw.score != null ? (fw.score * 100).toFixed(0) + '%' : ''}</span>
                 </div>
@@ -311,13 +341,12 @@ export default function Scorecards() {
             ))}
           </>
         )}
-
         {scorecard.weakest_frameworks?.length > 0 && (
           <>
             <h3 className="text-sm font-medium text-red-400 uppercase tracking-wider mb-3 mt-4">Weakest Frameworks</h3>
             {scorecard.weakest_frameworks.map((fw, i) => (
               <div key={i} className="border border-gray-800 rounded-lg p-3 bg-gray-900/20 mb-2">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex justify-between mb-1">
                   <span className="text-sm text-white font-medium">{fw.name}</span>
                   <span className="text-xs text-red-400 font-mono">{fw.score != null ? (fw.score * 100).toFixed(0) + '%' : ''}</span>
                 </div>
@@ -330,12 +359,11 @@ export default function Scorecards() {
     )
   }
 
-  // ─── Detail loading state ───
   if (selected && detailLoading) {
     return <div className="p-6 text-gray-400">Loading scorecard for {selected}...</div>
   }
 
-  // ─── Guest leaderboard ───
+  // ─── Guest leaderboard with search + sort ───
   return (
     <div className="p-6 max-w-4xl mx-auto overflow-y-auto h-full">
       <div className="mb-6">
@@ -345,25 +373,57 @@ export default function Scorecards() {
         </p>
       </div>
 
-      {guests.length === 0 ? (
+      {/* Search + Sort controls */}
+      <div className="flex gap-3 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search guests..."
+          className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-accent"
+        />
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-brand-accent"
+        >
+          {SORT_OPTIONS.map(opt => (
+            <option key={opt.id} value={opt.id}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Results count */}
+      <p className="text-xs text-gray-600 mb-3">
+        {filteredGuests.length} guest{filteredGuests.length !== 1 ? 's' : ''}
+        {search && ` matching "${search}"`}
+      </p>
+
+      {filteredGuests.length === 0 ? (
         <div className="text-center py-12">
           <span className="text-3xl mb-3 block">📊</span>
-          <p className="text-sm text-gray-400">No guest data yet. Scorecards populate after content is analyzed.</p>
+          <p className="text-sm text-gray-400">
+            {search ? `No guests matching "${search}"` : 'No guest data yet. Scorecards populate after content is analyzed.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {guests.map((g, i) => (
+          {filteredGuests.map((g, i) => (
             <button key={g.guest_name} onClick={() => loadScorecard(g.guest_name)}
               className="w-full text-left border border-gray-800 rounded-lg p-4 bg-gray-900/20 hover:bg-gray-900/50 hover:border-gray-700 transition-colors">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                   <span className="text-gray-600 font-mono text-xs w-6">#{i + 1}</span>
-                  <span className="text-white font-medium">{g.guest_name}</span>
+                  <div>
+                    <span className="text-white font-medium">{g.display_name || g.guest_name}</span>
+                    {g.bio && <span className="text-xs text-gray-500 ml-2">{g.bio}</span>}
+                  </div>
+                  <SocialLinks x_handle={g.x_handle} linkedin_url={g.linkedin_url} website_url={g.website_url} />
                 </div>
                 <div className="flex items-center gap-3">
                   <GradeChip grade={g.reasoning_grade} />
                   <span className="text-xs text-gray-500">
-                    {g.appearances} appearance{g.appearances !== 1 ? 's' : ''}
+                    {g.appearances} ep{g.appearances !== 1 ? 's' : ''}
                   </span>
                 </div>
               </div>

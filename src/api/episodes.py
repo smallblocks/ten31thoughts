@@ -12,7 +12,7 @@ from sqlalchemy import select, func, and_
 
 from ..db.models import (
     ContentItem, Feed, FeedCategory, AnalysisStatus,
-    ThesisElement, ExternalFramework, BlindSpot,
+    ThesisElement, ExternalFramework, BlindSpot, GuestProfile,
 )
 from ..db.session import get_db
 from ..analysis.classical_reference import (
@@ -342,9 +342,12 @@ def list_all_guests(
         .order_by(func.avg(ExternalFramework.reasoning_score).desc())
     ).all()
 
-    return [
-        {
+    results = []
+    for name, appearances, frameworks, avg, worst, best in guests:
+        profile = session.get(GuestProfile, name)
+        results.append({
             "guest_name": name,
+            "display_name": profile.display_name if profile else None,
             "appearances": appearances,
             "total_frameworks": frameworks,
             "avg_first_principles_score": round(float(avg), 3) if avg else None,
@@ -352,9 +355,129 @@ def list_all_guests(
             "worst_score": round(float(worst), 3) if worst else None,
             "reasoning_grade": _score_to_grade(float(avg) if avg else None),
             "consistency": round(float(best) - float(worst), 3) if best and worst else None,
-        }
-        for name, appearances, frameworks, avg, worst, best in guests
-    ]
+            "x_handle": profile.x_handle if profile else None,
+            "linkedin_url": profile.linkedin_url if profile else None,
+            "website_url": profile.website_url if profile else None,
+            "bio": profile.bio if profile else None,
+        })
+    return results
+
+
+@router.get("/guests/by-topic/{topic}")
+def list_guests_by_topic(
+    topic: str,
+    min_appearances: int = Query(1),
+    session: Session = Depends(get_db),
+):
+    """
+    Rank guests by their first-principles score on a specific topic.
+    Topics: fed_policy, labor_market, fiscal_policy, geopolitics, bitcoin,
+    credit_markets, energy, currencies, inflation, financial_plumbing,
+    regulatory, demographics, technology
+    """
+    # Get frameworks where key_indicators or description mentions the topic
+    frameworks = session.execute(
+        select(ExternalFramework)
+        .where(ExternalFramework.guest_name.isnot(None))
+    ).scalars().all()
+
+    # Filter to frameworks relevant to this topic
+    topic_keywords = topic.replace("_", " ").split()
+    guest_scores = {}
+
+    for fw in frameworks:
+        relevant = False
+        # Check description
+        desc = (fw.description or "").lower()
+        notes = (fw.reasoning_notes or "").lower()
+        indicators = str(fw.key_indicators or []).lower()
+
+        if any(kw in desc or kw in notes or kw in indicators for kw in topic_keywords):
+            relevant = True
+
+        if relevant and fw.reasoning_score is not None:
+            if fw.guest_name not in guest_scores:
+                guest_scores[fw.guest_name] = []
+            guest_scores[fw.guest_name].append(fw.reasoning_score)
+
+    results = []
+    for name, scores in guest_scores.items():
+        if len(scores) < min_appearances:
+            continue
+        profile = session.get(GuestProfile, name)
+        avg = sum(scores) / len(scores)
+        results.append({
+            "guest_name": name,
+            "topic": topic,
+            "avg_score": round(avg, 3),
+            "reasoning_grade": _score_to_grade(avg),
+            "sample_size": len(scores),
+            "x_handle": profile.x_handle if profile else None,
+        })
+
+    results.sort(key=lambda x: -(x["avg_score"] or 0))
+    return results
+
+
+@router.put("/guests/{guest_name}/profile")
+def update_guest_profile(
+    guest_name: str,
+    x_handle: Optional[str] = None,
+    linkedin_url: Optional[str] = None,
+    website_url: Optional[str] = None,
+    bio: Optional[str] = None,
+    display_name: Optional[str] = None,
+    session: Session = Depends(get_db),
+):
+    """
+    Set or update a guest's social links and profile info.
+    Call this to attach X/LinkedIn handles to a guest for verification.
+    """
+    profile = session.get(GuestProfile, guest_name)
+    if not profile:
+        profile = GuestProfile(guest_name=guest_name)
+        session.add(profile)
+
+    if x_handle is not None:
+        profile.x_handle = x_handle.lstrip("@")
+    if linkedin_url is not None:
+        profile.linkedin_url = linkedin_url
+    if website_url is not None:
+        profile.website_url = website_url
+    if bio is not None:
+        profile.bio = bio
+    if display_name is not None:
+        profile.display_name = display_name
+
+    session.commit()
+    return {
+        "guest_name": profile.guest_name,
+        "display_name": profile.display_name,
+        "x_handle": profile.x_handle,
+        "linkedin_url": profile.linkedin_url,
+        "website_url": profile.website_url,
+        "bio": profile.bio,
+    }
+
+
+@router.get("/guests/{guest_name}/profile")
+def get_guest_profile(
+    guest_name: str,
+    session: Session = Depends(get_db),
+):
+    """Get a guest's profile with social links."""
+    profile = session.get(GuestProfile, guest_name)
+    if not profile:
+        return {"guest_name": guest_name, "x_handle": None, "linkedin_url": None, "website_url": None, "bio": None}
+
+    return {
+        "guest_name": profile.guest_name,
+        "display_name": profile.display_name,
+        "x_handle": profile.x_handle,
+        "linkedin_url": profile.linkedin_url,
+        "website_url": profile.website_url,
+        "bio": profile.bio,
+    }
 
 
 @router.get("/guests/{guest_name}/scorecard")
@@ -385,6 +508,7 @@ def get_guest_scorecard(
 
     # Normalize guest name from results
     actual_name = frameworks[0][0].guest_name
+    profile = session.get(GuestProfile, actual_name)
 
     # ── Score trend ──
     score_trend = []
@@ -478,6 +602,12 @@ def get_guest_scorecard(
 
     return {
         "guest_name": actual_name,
+        "display_name": profile.display_name if profile else None,
+        "x_handle": profile.x_handle if profile else None,
+        "x_url": f"https://x.com/{profile.x_handle}" if profile and profile.x_handle else None,
+        "linkedin_url": profile.linkedin_url if profile else None,
+        "website_url": profile.website_url if profile else None,
+        "bio": profile.bio if profile else None,
         "total_appearances": len(set(fw.item_id for fw, _, _, _ in frameworks)),
         "total_frameworks": len(frameworks),
 

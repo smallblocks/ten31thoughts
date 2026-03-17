@@ -280,6 +280,20 @@ class PredictionMarketLink(Base):
     )
 
 
+class GuestProfile(Base):
+    """Profile metadata for external guests — social links, bio, etc."""
+    __tablename__ = "guest_profiles"
+
+    guest_name = Column(String, primary_key=True)
+    display_name = Column(String, nullable=True)  # normalized display name
+    x_handle = Column(String, nullable=True)  # Twitter/X handle without @
+    linkedin_url = Column(Text, nullable=True)
+    website_url = Column(Text, nullable=True)
+    bio = Column(Text, nullable=True)  # short bio/title
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+
 # ─── Database Setup ───
 
 def get_engine(db_path: str = None):
