@@ -409,45 +409,59 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
     # Generate response with tool support
     tool_calls_made = []
     max_tool_iterations = 3  # Prevent infinite loops
+    response_text = ""  # Initialize to avoid unbound variable
     
     for iteration in range(max_tool_iterations):
-        response = await llm.complete_with_tools(
-            task="chat",
-            messages=messages,
-            system=CHAT_SYSTEM,
-            tools=TOOLS,
-        )
+        try:
+            response = await llm.complete_with_tools(
+                task="chat",
+                messages=messages,
+                system=CHAT_SYSTEM,
+                tools=TOOLS,
+            )
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            response_text = "Sorry, there was an error processing your request. Please try again."
+            break
         
         # Check if the model wants to call a tool
         if response.get("tool_calls"):
             for tool_call in response["tool_calls"]:
-                tool_name = tool_call["function"]["name"]
-                tool_args = json.loads(tool_call["function"]["arguments"])
-                
-                logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
-                tool_result = await execute_tool(tool_name, tool_args)
-                tool_calls_made.append({"tool": tool_name, "args": tool_args})
-                
-                # Add assistant message with tool call
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [tool_call],
-                })
-                
-                # Add tool result
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call["id"],
-                    "content": tool_result,
-                })
+                try:
+                    tool_name = tool_call["function"]["name"]
+                    tool_args = json.loads(tool_call["function"]["arguments"])
+                    
+                    logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
+                    tool_result = await execute_tool(tool_name, tool_args)
+                    tool_calls_made.append({"tool": tool_name, "args": tool_args})
+                    
+                    # Add assistant message with tool call
+                    messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [tool_call],
+                    })
+                    
+                    # Add tool result
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "content": tool_result,
+                    })
+                except Exception as e:
+                    logger.error(f"Tool execution failed: {e}")
+                    # Continue without the tool result
         else:
             # No tool calls, we have our final response
-            response_text = response.get("content", "")
+            response_text = response.get("content") or ""
             break
     else:
-        # Exhausted iterations
-        response_text = response.get("content", "Unable to complete the request.")
+        # Exhausted iterations - get content from last response if available
+        response_text = response.get("content") or "Unable to complete the request."
+    
+    # Ensure we have a non-None response
+    if not response_text:
+        response_text = "I wasn't able to generate a response. Please try rephrasing your question."
 
     return ChatResponse(
         response=response_text,
