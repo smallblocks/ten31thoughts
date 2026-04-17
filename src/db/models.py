@@ -36,6 +36,15 @@ class AnalysisStatus(str, enum.Enum):
     ANALYZING = "analyzing"
     COMPLETE = "complete"
     ERROR = "error"
+    SKIPPED = "skipped"
+
+
+class ConnectionRelation(str, enum.Enum):
+    REINFORCES = "reinforces"
+    EXTENDS = "extends"
+    COMPLICATES = "complicates"
+    CONTRADICTS = "contradicts"
+    ECHOES_MECHANISM = "echoes_mechanism"
 
 
 class ConvictionLevel(str, enum.Enum):
@@ -280,6 +289,12 @@ class PredictionMarketLink(Base):
     )
 
 
+class ResurfacingTrigger(str, enum.Enum):
+    SCHEDULED = "scheduled"
+    SEMANTIC_ON_WRITE = "semantic_on_write"
+    NEWS_DRIVEN = "news_driven"
+
+
 class Note(Base):
     """Personal note used by the resurfacing engine."""
     __tablename__ = "notes"
@@ -299,6 +314,9 @@ class Note(Base):
     fsrs_reps = Column(Integer, default=0)
     fsrs_lapses = Column(Integer, default=0)
     fsrs_last_review = Column(DateTime, nullable=True)
+    # v3 source tracking
+    source = Column(String, nullable=True)  # "manual" | "timestamp" | "promoted_from_connection" | "promoted_from_signal"
+    source_item_id = Column(String, ForeignKey("content_items.item_id"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
@@ -309,6 +327,7 @@ class Note(Base):
         foreign_keys="[ResurfacingEvent.note_id]",
         cascade="all, delete-orphan",
     )
+    source_item = relationship("ContentItem", foreign_keys=[source_item_id])
 
     __table_args__ = (
         Index("idx_note_topic", "topic"),
@@ -316,11 +335,6 @@ class Note(Base):
         Index("idx_note_fsrs_due", "fsrs_due"),
     )
 
-
-class ResurfacingTrigger(str, enum.Enum):
-    SCHEDULED = "scheduled"
-    SEMANTIC_ON_WRITE = "semantic_on_write"
-    NEWS_DRIVEN = "news_driven"
 
 
 class ResurfacingEvent(Base):
@@ -348,6 +362,58 @@ class ResurfacingEvent(Base):
         Index("idx_resurfacing_trigger", "trigger"),
         Index("idx_resurfacing_digest", "digest_date"),
     )
+
+
+class Connection(Base):
+    """Connection between a content item and a note — the core v3 primitive."""
+    __tablename__ = "connections"
+
+    connection_id = Column(String, primary_key=True, default=gen_id)
+    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
+    note_id = Column(String, ForeignKey("notes.note_id"), nullable=False)
+
+    # One of: "reinforces" | "extends" | "complicates" | "contradicts" | "echoes_mechanism"
+    relation = Column(String, nullable=False)
+
+    articulation = Column(Text, nullable=False)  # 3-5 sentence prose bridge
+    excerpt = Column(Text, nullable=True)  # source passage
+    excerpt_location = Column(String, nullable=True)  # timestamp, page, etc.
+    principles_invoked = Column(JSON, default=list)  # list of axiom IDs
+
+    user_rating = Column(Integer, nullable=True)  # 1-5, null = unrated
+    user_promoted_to_note = Column(Boolean, default=False)
+    user_dismissed = Column(Boolean, default=False)
+
+    strength = Column(Float, nullable=False)  # LLM confidence 0-1
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    item = relationship("ContentItem")
+    note = relationship("Note")
+
+    __table_args__ = (
+        Index("idx_conn_item", "item_id"),
+        Index("idx_conn_note", "note_id"),
+        Index("idx_conn_rating", "user_rating"),
+    )
+
+
+class UnconnectedSignal(Base):
+    """Signal from content that doesn't connect to any existing note."""
+    __tablename__ = "unconnected_signals"
+
+    signal_id = Column(String, primary_key=True, default=gen_id)
+    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
+
+    topic_summary = Column(Text, nullable=False)
+    why_it_matters = Column(Text, nullable=False)
+    excerpt = Column(Text, nullable=True)
+
+    user_dismissed = Column(Boolean, default=False)
+    user_promoted_to_note = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    item = relationship("ContentItem")
 
 
 class GuestProfile(Base):

@@ -65,6 +65,10 @@ class VectorStore:
             name="notes",
             metadata={"description": "Personal notes for the resurfacing engine"}
         )
+        self.connections = self.client.get_or_create_collection(
+            name="connections",
+            metadata={"hnsw:space": "cosine"},
+        )
 
     # ─── Notes ───
 
@@ -98,6 +102,42 @@ class VectorStore:
             where=where if where else None,
         )
 
+        return self._format_results(results)
+
+    # ─── Connections ───
+
+    def index_connection(
+        self,
+        connection_id: str,
+        articulation: str,
+        metadata: dict,
+    ) -> None:
+        """Index a connection articulation for semantic search."""
+        self.connections.upsert(
+            ids=[connection_id],
+            documents=[articulation],
+            metadatas=[metadata],
+        )
+
+    def search_connections(
+        self,
+        query: str,
+        n_results: int = 10,
+        note_id: str = None,
+    ) -> list[dict]:
+        """Search connections semantically."""
+        where = {}
+        if note_id:
+            where["note_id"] = note_id
+
+        kwargs = {
+            "query_texts": [query],
+            "n_results": n_results,
+        }
+        if where:
+            kwargs["where"] = where
+
+        results = self.connections.query(**kwargs)
         return self._format_results(results)
 
     # ─── Content Chunking & Indexing ───
@@ -284,6 +324,7 @@ class VectorStore:
             "frameworks": self.frameworks.count(),
             "blind_spots": self.blind_spots.count(),
             "notes": self.notes.count(),
+            "connections": self.connections.count(),
         }
 
     # ─── Helpers ───
