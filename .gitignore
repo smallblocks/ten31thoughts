@@ -7,3 +7,6 @@ docker-images/
 .startos/
 output/
 __pycache__/
+.venv/
+data/
+*.db
