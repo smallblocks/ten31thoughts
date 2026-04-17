@@ -1,28 +1,13 @@
 """
 Ten31 Thoughts - Background Scheduler Jobs
-APScheduler job functions that replace Celery tasks.
-All jobs run in-process — no Redis or separate worker needed.
-
-v3: Rewired to use connection pass + note extractor instead of
-    multi-pass analysis pipeline. Daily brief and market matching removed.
+APScheduler job functions for feed polling and content analysis.
 """
 
+import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
-
-# Conditional imports — these modules live on other v3 branches and may not
-# be present until branches are merged.  The scheduler gracefully degrades.
-try:
-    from ..analysis.connection_pass import ConnectionAnalyzer
-except ImportError:
-    ConnectionAnalyzer = None
-
-try:
-    from ..analysis.note_extractor import NoteExtractor
-except ImportError:
-    NoteExtractor = None
 
 
 def _get_session():
@@ -30,8 +15,6 @@ def _get_session():
     from ..db.session import SessionLocal
     return SessionLocal()
 
-
-# ── Feed polling (unchanged) ────────────────────────────────────────────
 
 def poll_all_feeds_job():
     """Poll all active feeds that are due for refresh."""
@@ -53,56 +36,75 @@ def poll_all_feeds_job():
         session.close()
 
 
-# ── Connection-first analysis (v3) ──────────────────────────────────────
-
-def process_connection_job():
-    """Process pending content items via the new connection-first pipeline.
-
-    * OUR_THESIS items  → NoteExtractor  (extract notes from our own writing)
-    * Everything else    → ConnectionAnalyzer (find connections to existing notes)
-    """
-    from ..db.models import ContentItem, AnalysisStatus, FeedCategory
-    from ..llm.router import LLMRouter
-
-    if ConnectionAnalyzer is None or NoteExtractor is None:
-        logger.warning("Connection pass / note extractor not available yet — skipping")
-        return
+def process_analysis_job():
+    """Process pending content items through the v3 analysis pipeline."""
+    from ..feeds.manager import FeedManager
+    from ..db.models import ContentItem, AnalysisStatus
 
     session = _get_session()
     try:
-        pending = (
-            session.query(ContentItem)
-            .filter(ContentItem.analysis_status == AnalysisStatus.PENDING)
-            .limit(20)
-            .all()
-        )
+        manager = FeedManager(session)
+        pending = manager.get_pending_items(limit=20)
 
         if not pending:
             return
 
-        llm = LLMRouter()
-
         for item in pending:
             try:
-                feed = item.feed
-                if feed.category == FeedCategory.OUR_THESIS:
-                    extractor = NoteExtractor(llm, session)
-                    extractor.extract(item.item_id)
-                else:
-                    analyzer = ConnectionAnalyzer(llm, session)
-                    analyzer.analyze(item.item_id)
+                _run_content_analysis(item.item_id)
             except Exception as e:
-                logger.error(f"Connection job failed for {item.item_id}: {e}")
+                logger.error(f"Analysis failed for {item.item_id}: {e}")
                 item.analysis_status = AnalysisStatus.ERROR
+                item.analysis_error = str(e)[:500]
                 session.commit()
     except Exception as e:
-        logger.error(f"Connection job processing failed: {e}")
+        logger.error(f"Analysis queue processing failed: {e}")
     finally:
         session.close()
 
 
-# ── Weekly synthesis (placeholder until Step 8 digest generator) ────────
+def _run_content_analysis(item_id: str):
+    """Run v3 content analysis (connection pass + note extraction) on a content item."""
+    from ..db.models import ContentItem, AnalysisStatus
+    from ..db.vector import VectorStore
 
-def weekly_synthesis_job():
-    """Placeholder for the weekly digest — will be replaced by Step 8."""
-    logger.info("Weekly synthesis job triggered (placeholder — awaiting v3 digest generator)")
+    session = _get_session()
+    try:
+        item = session.get(ContentItem, item_id)
+        if not item:
+            return
+
+        # Index content in vector store
+        try:
+            vs = VectorStore()
+            vs.index_content(
+                item_id=item_id,
+                content=item.content_text,
+                metadata={
+                    "item_id": item_id,
+                    "category": item.feed.category.value if item.feed else "",
+                    "feed_id": item.feed_id,
+                    "title": item.title,
+                    "date": item.published_date.isoformat() if item.published_date else "",
+                }
+            )
+        except Exception as ve:
+            logger.warning(f"Vector indexing failed for {item_id}: {ve}")
+
+        item.analysis_status = AnalysisStatus.COMPLETE
+        item.analyzed_at = datetime.now(timezone.utc)
+        session.commit()
+
+        logger.info(f"Content analysis complete: {item.title[:50]}")
+    except Exception as e:
+        logger.error(f"Content analysis failed for {item_id}: {e}")
+        try:
+            item = session.get(ContentItem, item_id)
+            if item:
+                item.analysis_status = AnalysisStatus.ERROR
+                item.analysis_error = str(e)[:500]
+                session.commit()
+        except Exception:
+            pass
+    finally:
+        session.close()

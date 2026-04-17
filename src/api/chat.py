@@ -16,10 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
-from ..db.models import (
-    ContentItem, ThesisElement, ExternalFramework, BlindSpot,
-    WeeklyBriefing, Feed, FeedCategory
-)
+from ..db.models import ContentItem, Feed, FeedCategory
 from ..db.session import get_db
 from ..db.vector import VectorStore
 from ..llm.router import LLMRouter
@@ -56,66 +53,42 @@ RULES — FOLLOW THESE WITHOUT EXCEPTION:
    jobs in October relative to 223,000 in the prior month and expectations for 100,000."
    Cite the number, the date, the source, the comparison.
 
-4. Deploy dry wit sparingly and only when it reveals something true. "Pro-tax advocates
-   recoiled in horror at the bill's potential to deprive the government of tens of tax
-   dollars" works because it makes a substantive point through irony. Do not force humor.
+4. Deploy dry wit sparingly and only when it reveals something true.
 
 5. Use parenthetical asides to deliver the real point inside what looks like a subordinate
-   clause: "(though heightened borrowing from both the Discount Window and the new BTFP
-   facility persisted)" — this is how the Timestamp hides its sharpest observations in
-   plain sight. Do this.
+   clause.
 
 6. Contextualize against structural time, not news cycles. Reference decades, centuries,
-   historical patterns. "This represents the latest instance of a long-established pattern"
-   is how the Timestamp writes. Not "this is happening now."
+   historical patterns.
 
 7. Show institutional skepticism. When official data or narratives are cited, note what
-   they conveniently omit: "While some of the wide miss can likely be attributed to storm
-   activity and a strike at Boeing, the weaker than expected report also included significant
-   downward revisions for numbers from both August and September." Acknowledge the official
-   excuse, then present the structural reality underneath it.
+   they conveniently omit.
 
 8. When citing sources from the database, use this format naturally in prose:
    "As [Guest Name] argued on MacroVoices [date]..." or "The [date] edition of the
-   Timestamp noted that..." Do not use bracketed citation formats. Weave sources into
-   the prose the way a newsletter writer would.
+   Timestamp noted that..." Do not use bracketed citation formats.
 
-9. State your thesis conviction plainly when relevant, without hedging or cheerleading:
-   "anyone fading this is missing the forest for the trees" — not "we believe this could
-   potentially be significant." No weasel words.
+9. State your thesis conviction plainly when relevant, without hedging or cheerleading.
 
-10. End substantive responses with either an actionable observation ("this is worth
-    watching because...") or a structural framing ("the pattern here is the same one
-    that has played out in every late-cycle environment since..."). Never end with
-    "I hope this helps!" or "Let me know if you have questions!"
+10. End substantive responses with either an actionable observation or a structural framing.
+    Never end with "I hope this helps!" or "Let me know if you have questions!"
 
 YOUR ANALYTICAL FRAMEWORK:
 You evaluate everything through first principles drawn from the classical tradition:
-- SOUND MONEY: Aristotle, Copernicus, Oresme, Menger, Mises, Hayek — debasement is the
-  default state trajectory, not an aberration
-- POLITICAL CYCLES: Polybius, Cicero, Machiavelli, Gibbon — republics decay, empires
-  overextend, institutional stability must be maintained rather than assumed
-- HUMAN NATURE: Thucydides, Smith, Bastiat, Sowell — incentives drive behavior, dispersed
-  knowledge cannot be centralized, every policy has unseen costs
-- PROPERTY RIGHTS: Locke, Montesquieu, de Soto — security of property is the foundation
-  of prosperity
-
-Reference these thinkers when their principles are directly relevant — not as decoration
-but as genuine intellectual engagement that clarifies the analysis.
+- SOUND MONEY: Aristotle, Copernicus, Oresme, Menger, Mises, Hayek
+- POLITICAL CYCLES: Polybius, Cicero, Machiavelli, Gibbon
+- HUMAN NATURE: Thucydides, Smith, Bastiat, Sowell
+- PROPERTY RIGHTS: Locke, Montesquieu, de Soto
 
 WHAT YOU HAVE ACCESS TO:
 - The full archive of Ten31 Timestamp newsletter editions
-- MacroVoices and other external podcast transcripts with framework analysis
-- First-principles evaluations scoring every external framework against classical axioms
-- Convergence analysis showing where the Ten31 thesis aligns or diverges with external voices
-- Blind spot detection highlighting topics that are systematically under-discussed
-- Prediction tracking with market-adjudicated outcomes via Polymarket and Kalshi
+- External podcast transcripts
+- Personal notes and connections between content and notes
+- Unconnected signals worth watching
 
 TOOLS:
 You have access to a web_search tool that queries the internet via a local SearXNG instance.
-Use it when you need current data that is not in the database — Fed announcements, recent
-market moves, breaking news, or any real-time information. Do not hallucinate current prices
-or data; call web_search to get them. When you use search results, cite the source URL.
+Use it when you need current data not in the database.
 
 The user is a macro analyst at Ten31. They want the sharpest possible analysis in the
 voice of their own firm's research. Do not waste their time."""
@@ -169,22 +142,21 @@ async def execute_tool(name: str, arguments: dict) -> str:
         query = arguments.get("query", "")
         count = arguments.get("count", 5)
         results = await execute_search(query, count)
-        
+
         if not results:
             return f"No results found for: {query}"
-        
-        # Format results for the LLM
+
         formatted = [f"Search results for: {query}\n"]
         for i, r in enumerate(results, 1):
             formatted.append(f"{i}. {r['title']}\n   URL: {r['url']}\n   {r['snippet']}\n")
-        
+
         return "\n".join(formatted)
-    
+
     return f"Unknown tool: {name}"
 
 
 class ContextBuilder:
-    """Builds RAG context for chat responses by combining vector search with structured queries."""
+    """Builds RAG context for chat responses using notes, connections, content, and signals."""
 
     def __init__(self, session: Session, vector_store: VectorStore):
         self.session = session
@@ -198,168 +170,62 @@ class ContextBuilder:
         sources = []
         context_parts = []
 
-        # Detect query intent for targeted retrieval
-        intent = self._classify_intent(query)
+        # Vector search: content chunks
+        category = None
+        if scope == "our_thesis":
+            category = "our_thesis"
+        elif scope == "external":
+            category = "external_interview"
 
-        # Vector search across all collections
-        if intent in ("general", "comparison", "framework"):
-            category = None
-            if scope == "our_thesis":
-                category = "our_thesis"
-            elif scope == "external":
-                category = "external_interview"
+        content_results = self.vs.search_content(query, n_results=5, category=category)
+        if content_results:
+            context_parts.append("=== Relevant Content ===")
+            for r in content_results:
+                meta = r["metadata"]
+                context_parts.append(
+                    f"[{meta.get('title', 'Unknown')} | {meta.get('date', '')} | "
+                    f"{meta.get('category', '')}]\n{r['document'][:800]}"
+                )
+                sources.append({
+                    "type": "content",
+                    "title": meta.get("title", ""),
+                    "date": meta.get("date", ""),
+                    "category": meta.get("category", ""),
+                })
 
-            content_results = self.vs.search_content(query, n_results=5, category=category)
-            if content_results:
-                context_parts.append("=== Relevant Content ===")
-                for r in content_results:
-                    meta = r["metadata"]
-                    context_parts.append(
-                        f"[{meta.get('title', 'Unknown')} | {meta.get('date', '')} | "
-                        f"{meta.get('category', '')}]\n{r['document'][:800]}"
-                    )
-                    sources.append({
-                        "type": "content",
-                        "title": meta.get("title", ""),
-                        "date": meta.get("date", ""),
-                        "category": meta.get("category", ""),
-                    })
+        # Notes
+        note_results = self.vs.search_notes(query, n_results=5)
+        if note_results:
+            context_parts.append("\n=== Notes ===")
+            for r in note_results:
+                meta = r["metadata"]
+                context_parts.append(
+                    f"[Note: {meta.get('title', 'Untitled')} | "
+                    f"Topic: {meta.get('topic', '')}]\n{r['document'][:500]}"
+                )
+                sources.append({
+                    "type": "note",
+                    "title": meta.get("title", ""),
+                    "topic": meta.get("topic", ""),
+                })
 
-        # Thesis elements search
-        if intent in ("general", "thesis", "prediction", "comparison"):
-            thesis_results = self.vs.search_thesis_elements(query, n_results=5)
-            if thesis_results:
-                context_parts.append("\n=== Our Thesis Elements ===")
-                for r in thesis_results:
-                    meta = r["metadata"]
-                    context_parts.append(
-                        f"[Topic: {meta.get('topic', '')} | "
-                        f"Conviction: {meta.get('conviction', '')} | "
-                        f"Prediction: {meta.get('is_prediction', False)}]\n{r['document'][:500]}"
-                    )
-                    sources.append({
-                        "type": "thesis_element",
-                        "topic": meta.get("topic", ""),
-                        "conviction": meta.get("conviction", ""),
-                    })
-
-        # Framework search
-        if intent in ("general", "framework", "comparison", "guest"):
-            fw_results = self.vs.search_frameworks(query, n_results=5)
-            if fw_results:
-                context_parts.append("\n=== External Frameworks ===")
-                for r in fw_results:
-                    meta = r["metadata"]
-                    context_parts.append(
-                        f"[Guest: {meta.get('guest_name', '')} | "
-                        f"Score: {meta.get('reasoning_score', 'N/A')}]\n{r['document'][:500]}"
-                    )
-                    sources.append({
-                        "type": "framework",
-                        "guest_name": meta.get("guest_name", ""),
-                        "reasoning_score": meta.get("reasoning_score"),
-                    })
-
-        # Blind spot search
-        if intent in ("general", "blindspot"):
-            spot_results = self.vs.search_blind_spots(query, n_results=3)
-            if spot_results:
-                context_parts.append("\n=== Blind Spots ===")
-                for r in spot_results:
-                    meta = r["metadata"]
-                    context_parts.append(
-                        f"[Severity: {meta.get('severity', '')} | "
-                        f"Type: {meta.get('source_type', '')}]\n{r['document'][:400]}"
-                    )
-                    sources.append({
-                        "type": "blind_spot",
-                        "severity": meta.get("severity", ""),
-                    })
-
-        # Add latest briefing context if relevant
-        if intent in ("general", "framework", "briefing"):
-            briefing = self._get_latest_briefing_context()
-            if briefing:
-                context_parts.append(f"\n=== Latest Weekly Briefing ===\n{briefing}")
-
-        # Add scorecard if prediction-related
-        if intent in ("prediction", "scorecard"):
-            scorecard = self._get_scorecard_context()
-            if scorecard:
-                context_parts.append(f"\n=== Prediction Scorecard ===\n{scorecard}")
+        # Connections
+        conn_results = self.vs.search_connections(query, n_results=5)
+        if conn_results:
+            context_parts.append("\n=== Connections ===")
+            for r in conn_results:
+                meta = r["metadata"]
+                context_parts.append(
+                    f"[Connection: {meta.get('relation', '')} | "
+                    f"Strength: {meta.get('strength', '')}]\n{r['document'][:500]}"
+                )
+                sources.append({
+                    "type": "connection",
+                    "relation": meta.get("relation", ""),
+                })
 
         context = "\n\n".join(context_parts)
         return context, sources
-
-    def _classify_intent(self, query: str) -> str:
-        """Classify the query intent for targeted retrieval."""
-        q = query.lower()
-
-        if any(w in q for w in ["top 5", "framework", "rank", "best model"]):
-            return "framework"
-        if any(w in q for w in ["predict", "accuracy", "scorecard", "track record", "validated"]):
-            return "prediction"
-        if any(w in q for w in ["blind spot", "missing", "not talking", "overlooked"]):
-            return "blindspot"
-        if any(w in q for w in ["disagree", "diverge", "compare", "vs", "versus", "difference"]):
-            return "comparison"
-        if any(w in q for w in ["my view", "our thesis", "our position", "we think", "timestamp"]):
-            return "thesis"
-        if any(w in q for w in ["briefing", "weekly", "summary", "this week"]):
-            return "briefing"
-        if any(w in q for w in ["scorecard", "score"]):
-            return "scorecard"
-        # Check for guest names
-        if any(w in q for w in ["who", "guest", "said"]):
-            return "guest"
-
-        return "general"
-
-    def _get_latest_briefing_context(self) -> Optional[str]:
-        """Get summary of latest briefing for context."""
-        briefing = self.session.execute(
-            select(WeeklyBriefing)
-            .order_by(WeeklyBriefing.created_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
-
-        if not briefing:
-            return None
-
-        parts = [f"Week of {briefing.week_start.strftime('%Y-%m-%d')}:"]
-
-        if briefing.top_frameworks:
-            parts.append("Top frameworks: " + ", ".join(
-                f"{fw.get('framework_name', '')} ({fw.get('composite_score', 0):.2f})"
-                for fw in briefing.top_frameworks[:5]
-            ))
-
-        if briefing.blind_spot_alerts:
-            mutual = briefing.blind_spot_alerts.get("recent_mutual", [])
-            if mutual:
-                parts.append("Blind spots: " + ", ".join(
-                    s.get("topic", "") for s in mutual[:3]
-                ))
-
-        return "\n".join(parts)
-
-    def _get_scorecard_context(self) -> Optional[str]:
-        """Get scorecard summary for context."""
-        briefing = self.session.execute(
-            select(WeeklyBriefing)
-            .where(WeeklyBriefing.thesis_scorecard.isnot(None))
-            .order_by(WeeklyBriefing.created_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
-
-        if not briefing or not briefing.thesis_scorecard:
-            return None
-
-        card = briefing.thesis_scorecard.get("thesis", {})
-        accuracy = card.get("accuracy_rate")
-        return (
-            f"Our accuracy rate: {accuracy:.0%}\n" if accuracy else ""
-        ) + f"Total predictions tracked: {card.get('total', 0)}"
 
 
 # ─── Endpoints ───
@@ -409,9 +275,9 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
 
     # Generate response with tool support
     tool_calls_made = []
-    max_tool_iterations = 3  # Prevent infinite loops
-    response_text = ""  # Initialize to avoid unbound variable
-    
+    max_tool_iterations = 3
+    response_text = ""
+
     for iteration in range(max_tool_iterations):
         try:
             response = await llm.complete_with_tools(
@@ -424,26 +290,22 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
             logger.error(f"LLM call failed: {e}")
             response_text = "Sorry, there was an error processing your request. Please try again."
             break
-        
-        # Check if the model wants to call a tool
+
         if response.get("tool_calls"):
             for tool_call in response["tool_calls"]:
                 try:
                     tool_name = tool_call["function"]["name"]
                     tool_args = json.loads(tool_call["function"]["arguments"])
-                    
+
                     logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
                     tool_result = await execute_tool(tool_name, tool_args)
                     tool_calls_made.append({"tool": tool_name, "args": tool_args})
-                    
-                    # Add assistant message with tool call
+
                     messages.append({
                         "role": "assistant",
                         "content": None,
                         "tool_calls": [tool_call],
                     })
-                    
-                    # Add tool result
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call["id"],
@@ -451,16 +313,12 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
                     })
                 except Exception as e:
                     logger.error(f"Tool execution failed: {e}")
-                    # Continue without the tool result
         else:
-            # No tool calls, we have our final response
             response_text = response.get("content") or ""
             break
     else:
-        # Exhausted iterations - get content from last response if available
         response_text = response.get("content") or "Unable to complete the request."
-    
-    # Ensure we have a non-None response
+
     if not response_text:
         response_text = "I wasn't able to generate a response. Please try rephrasing your question."
 
@@ -474,58 +332,3 @@ async def chat(request: ChatRequest, session: Session = Depends(get_db)):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
-
-
-@router.get("/briefings")
-def list_briefings(
-    limit: int = 20,
-    session: Session = Depends(get_db),
-):
-    """List available weekly briefings."""
-    briefings = session.execute(
-        select(WeeklyBriefing)
-        .order_by(WeeklyBriefing.created_at.desc())
-        .limit(limit)
-    ).scalars().all()
-
-    return [
-        {
-            "briefing_id": b.briefing_id,
-            "week_start": b.week_start.isoformat() if b.week_start else None,
-            "week_end": b.week_end.isoformat() if b.week_end else None,
-            "items_ingested": b.items_ingested,
-            "items_analyzed": b.items_analyzed,
-            "has_pdf": bool(b.file_path_pdf),
-            "has_frameworks": bool(b.top_frameworks),
-            "created_at": b.created_at.isoformat(),
-        }
-        for b in briefings
-    ]
-
-
-@router.get("/briefings/latest")
-def get_latest_briefing(session: Session = Depends(get_db)):
-    """Get the latest weekly briefing with full data."""
-    briefing = session.execute(
-        select(WeeklyBriefing)
-        .order_by(WeeklyBriefing.created_at.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-
-    if not briefing:
-        raise HTTPException(status_code=404, detail="No briefings generated yet")
-
-    return {
-        "briefing_id": briefing.briefing_id,
-        "week_start": briefing.week_start.isoformat(),
-        "week_end": briefing.week_end.isoformat(),
-        "top_frameworks": briefing.top_frameworks,
-        "thesis_scorecard": briefing.thesis_scorecard,
-        "convergence_summary": briefing.convergence_summary,
-        "blind_spot_alerts": briefing.blind_spot_alerts,
-        "narrative_shifts": briefing.narrative_shifts,
-        "items_ingested": briefing.items_ingested,
-        "items_analyzed": briefing.items_analyzed,
-        "file_path_pdf": briefing.file_path_pdf,
-        "created_at": briefing.created_at.isoformat(),
-    }

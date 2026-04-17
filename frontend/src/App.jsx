@@ -1,16 +1,12 @@
 import React, { useState } from 'react'
 import Chat from './components/Chat'
-import Notes from './components/Notes'
-import Connections from './components/Connections'
-import Digest from './components/Digest'
 import Feeds from './components/Feeds'
+import Briefings from './components/Briefings'
 import Status from './components/Status'
 
 const TABS = [
   { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'notes', label: 'Notes', icon: '📝' },
-  { id: 'connections', label: 'Connections', icon: '🔗' },
-  { id: 'digest', label: 'Digest', icon: '📰' },
+  { id: 'briefings', label: 'Briefings', icon: '📋' },
   { id: 'feeds', label: 'Feeds', icon: '📡' },
   { id: 'status', label: 'Status', icon: '⚙️' },
 ]
@@ -49,9 +45,7 @@ export default function App() {
       {/* Content */}
       <main className="flex-1 overflow-hidden">
         {tab === 'chat' && <Chat />}
-        {tab === 'notes' && <Notes />}
-        {tab === 'connections' && <Connections />}
-        {tab === 'digest' && <Digest />}
+        {tab === 'briefings' && <Briefings />}
         {tab === 'feeds' && <Feeds />}
         {tab === 'status' && <Status />}
       </main>
