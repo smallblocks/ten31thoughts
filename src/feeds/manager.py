@@ -74,6 +74,11 @@ class FeedManager:
             f"with {metadata.item_count} discoverable items"
         )
 
+        # Initial poll — mark all existing items as SKIPPED so only
+        # genuinely new content (from subsequent polls) enters the
+        # analysis pipeline.
+        self.poll_feed(feed, mark_new_as=AnalysisStatus.SKIPPED)
+
         return feed, None
 
     def list_feeds(
@@ -155,10 +160,20 @@ class FeedManager:
 
         return due_feeds
 
-    def poll_feed(self, feed: Feed) -> list[ContentItem]:
+    def poll_feed(
+        self,
+        feed: Feed,
+        mark_new_as: AnalysisStatus = AnalysisStatus.PENDING,
+    ) -> list[ContentItem]:
         """
         Poll a single feed for new content.
         Returns list of newly created ContentItem objects.
+
+        Args:
+            feed: The feed to poll.
+            mark_new_as: AnalysisStatus to assign to newly discovered items.
+                         Use SKIPPED for initial feed onboarding (existing items)
+                         and PENDING (default) for subsequent polls.
         """
         logger.info(f"Polling feed: {feed.display_name} ({feed.url})")
 
@@ -198,7 +213,7 @@ class FeedManager:
                     content_hash=parsed.content_hash,
                     content_type=parsed.content_type,
                     audio_url=parsed.audio_url,
-                    analysis_status=AnalysisStatus.PENDING,
+                    analysis_status=mark_new_as,
                 )
 
                 self.session.add(item)
