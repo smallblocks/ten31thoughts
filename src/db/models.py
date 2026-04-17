@@ -416,6 +416,18 @@ class UnconnectedSignal(Base):
     item = relationship("ContentItem")
 
 
+class Digest(Base):
+    """Generated weekly digest document."""
+    __tablename__ = "digests"
+
+    digest_id = Column(String, primary_key=True, default=gen_id)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    html_content = Column(Text, nullable=False)
+    raw_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class GuestProfile(Base):
     """Profile metadata for external guests — social links, bio, ELO rating."""
     __tablename__ = "guest_profiles"

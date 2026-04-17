@@ -25,6 +25,7 @@ from .api.search import router as search_router
 from .api.upload import router as upload_router
 from .api.connections import router as connections_router
 from .api.connections import signals_router
+from .api.digest import router as digest_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,6 +107,7 @@ app.include_router(search_router)
 app.include_router(upload_router)
 app.include_router(connections_router)
 app.include_router(signals_router)
+app.include_router(digest_router)
 
 
 @app.get("/api/health")
