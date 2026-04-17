@@ -36,6 +36,15 @@ class AnalysisStatus(str, enum.Enum):
     ANALYZING = "analyzing"
     COMPLETE = "complete"
     ERROR = "error"
+    SKIPPED = "skipped"
+
+
+class ConnectionRelation(str, enum.Enum):
+    REINFORCES = "reinforces"
+    EXTENDS = "extends"
+    COMPLICATES = "complicates"
+    CONTRADICTS = "contradicts"
+    ECHOES_MECHANISM = "echoes_mechanism"
 
 
 class ConvictionLevel(str, enum.Enum):
@@ -278,6 +287,132 @@ class PredictionMarketLink(Base):
         Index("idx_market_link_platform", "platform"),
         Index("idx_market_link_status", "market_status"),
     )
+
+
+class ResurfacingTrigger(str, enum.Enum):
+    SCHEDULED = "scheduled"
+    SEMANTIC_ON_WRITE = "semantic_on_write"
+    NEWS_DRIVEN = "news_driven"
+
+
+class Note(Base):
+    """Personal note used by the resurfacing engine."""
+    __tablename__ = "notes"
+
+    note_id = Column(String, primary_key=True, default=gen_id)
+    title = Column(String(500), nullable=True)
+    body = Column(Text, nullable=False)
+    topic = Column(String, nullable=True)
+    tags = Column(JSON, default=list)
+    source_url = Column(Text, nullable=True)
+    archived = Column(Boolean, default=False)
+    # FSRS spaced-repetition fields
+    fsrs_due = Column(DateTime, nullable=True)
+    fsrs_stability = Column(Float, nullable=True)
+    fsrs_difficulty = Column(Float, nullable=True)
+    fsrs_state = Column(Integer, default=0)
+    fsrs_reps = Column(Integer, default=0)
+    fsrs_lapses = Column(Integer, default=0)
+    fsrs_last_review = Column(DateTime, nullable=True)
+    # v3 source tracking
+    source = Column(String, nullable=True)  # "manual" | "timestamp" | "promoted_from_connection" | "promoted_from_signal"
+    source_item_id = Column(String, ForeignKey("content_items.item_id"), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    resurfacing_events = relationship(
+        "ResurfacingEvent", back_populates="note",
+        foreign_keys="[ResurfacingEvent.note_id]",
+        cascade="all, delete-orphan",
+    )
+    source_item = relationship("ContentItem", foreign_keys=[source_item_id])
+
+    __table_args__ = (
+        Index("idx_note_topic", "topic"),
+        Index("idx_note_archived", "archived"),
+        Index("idx_note_fsrs_due", "fsrs_due"),
+    )
+
+
+class ResurfacingEvent(Base):
+    """Record of a note being surfaced to the user."""
+    __tablename__ = "resurfacing_events"
+
+    event_id = Column(String, primary_key=True, default=gen_id)
+    note_id = Column(String, ForeignKey("notes.note_id"), nullable=False)
+    trigger = Column(SAEnum(ResurfacingTrigger), nullable=False)
+    trigger_item_id = Column(String, ForeignKey("content_items.item_id"), nullable=True)
+    trigger_note_id = Column(String, ForeignKey("notes.note_id"), nullable=True)
+    similarity_score = Column(Float, nullable=True)
+    bridge_text = Column(Text, nullable=True)
+    surfaced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    digest_date = Column(DateTime, nullable=True)
+    engaged_at = Column(DateTime, nullable=True)
+    dismissed_at = Column(DateTime, nullable=True)
+    rating = Column(Integer, nullable=True)
+
+    # Relationships
+    note = relationship("Note", back_populates="resurfacing_events", foreign_keys=[note_id])
+
+    __table_args__ = (
+        Index("idx_resurfacing_note", "note_id"),
+        Index("idx_resurfacing_trigger", "trigger"),
+        Index("idx_resurfacing_digest", "digest_date"),
+    )
+
+
+class Connection(Base):
+    """Connection between a content item and a note — the core v3 primitive."""
+    __tablename__ = "connections"
+
+    connection_id = Column(String, primary_key=True, default=gen_id)
+    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
+    note_id = Column(String, ForeignKey("notes.note_id"), nullable=False)
+
+    # One of: "reinforces" | "extends" | "complicates" | "contradicts" | "echoes_mechanism"
+    relation = Column(String, nullable=False)
+
+    articulation = Column(Text, nullable=False)  # 3-5 sentence prose bridge
+    excerpt = Column(Text, nullable=True)  # source passage
+    excerpt_location = Column(String, nullable=True)  # timestamp, page, etc.
+    principles_invoked = Column(JSON, default=list)  # list of axiom IDs
+
+    user_rating = Column(Integer, nullable=True)  # 1-5, null = unrated
+    user_promoted_to_note = Column(Boolean, default=False)
+    user_dismissed = Column(Boolean, default=False)
+
+    strength = Column(Float, nullable=False)  # LLM confidence 0-1
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    item = relationship("ContentItem")
+    note = relationship("Note")
+
+    __table_args__ = (
+        Index("idx_conn_item", "item_id"),
+        Index("idx_conn_note", "note_id"),
+        Index("idx_conn_rating", "user_rating"),
+    )
+
+
+class UnconnectedSignal(Base):
+    """Signal from content that doesn't connect to any existing note."""
+    __tablename__ = "unconnected_signals"
+
+    signal_id = Column(String, primary_key=True, default=gen_id)
+    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
+
+    topic_summary = Column(Text, nullable=False)
+    why_it_matters = Column(Text, nullable=False)
+    excerpt = Column(Text, nullable=True)
+
+    user_dismissed = Column(Boolean, default=False)
+    user_promoted_to_note = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    item = relationship("ContentItem")
 
 
 class GuestProfile(Base):
