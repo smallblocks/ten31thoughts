@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ..db.models import Note, gen_id
 from ..db.session import get_db
 from ..db.vector import VectorStore
+from ..resurfacing.semantic_on_write import fire_semantic_on_write
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ def create_note(
     request: CreateNoteRequest,
     session: Session = Depends(get_db),
 ):
-    """Create a new note. Writes through to ChromaDB."""
+    """Create a new note. Fires the semantic-on-write trigger, then writes through to ChromaDB."""
     body = request.body.strip()
     if not body:
         raise HTTPException(status_code=400, detail="Body cannot be empty or whitespace only")
@@ -134,6 +135,8 @@ def create_note(
     session.add(note)
     session.commit()
     session.refresh(note)
+
+    fire_semantic_on_write(session, note)
 
     _index_note_lenient(note)
 
@@ -187,6 +190,7 @@ def update_note(
     """
     Partial update. Only fields present in the request body are modified.
     Write-through to Chroma fires only when body or topic changed.
+    Semantic-on-write trigger fires under the same condition.
     """
     note = session.get(Note, note_id)
     if not note:
@@ -221,6 +225,7 @@ def update_note(
     session.refresh(note)
 
     if needs_reindex:
+        fire_semantic_on_write(session, note)
         _index_note_lenient(note)
 
     return note_to_response(note)
