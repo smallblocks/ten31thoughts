@@ -2,15 +2,16 @@
 
 **Macro Intelligence Service** — Your thesis vs. the world.
 
-A self-hosted StartOS service that coordinates your published macro framework (Ten31 Timestamp) with external macro voices (MacroVoices, Real Vision, etc.) to surface the top mental models for navigating the current macro landscape.
+A self-hosted StartOS service that ingests your published macro framework (Ten31 Timestamp) and external macro voices (MacroVoices, Real Vision, etc.), extracts notes, finds connections between content and your thinking, and surfaces insights through a RAG-powered chat interface.
 
-## How It Works
+## How It Works (v3 Architecture)
 
 1. **Add RSS feeds** — Classify as "our thesis" or "external interview"
-2. **Automatic ingestion** — Polls feeds every 15 minutes
-3. **Multi-pass LLM analysis** — 3 passes for your content, 4 passes for external
-4. **Convergence engine** — Maps agree/diverge, validates predictions, detects blind spots
-5. **Weekly briefing + chat** — Structured briefing doc + RAG-powered chat
+2. **Automatic ingestion** — Polls feeds daily, extracts and indexes content
+3. **Note extraction** — Pulls key insights from content into personal notes
+4. **Connection pass** — Finds connections between new content and existing notes using classical principles
+5. **Unconnected signals** — Surfaces content that doesn't match existing notes (potential new threads)
+6. **Digest + Chat** — Daily digest of connections + RAG-powered chat
 
 ## Architecture
 
@@ -26,8 +27,7 @@ Single-container design for StartOS compatibility:
 │     ▼     ▼             ▼                   │
 │  REST API + Chat    Background Jobs         │
 │     │                 • Feed polling         │
-│     │                 • LLM analysis         │
-│     │                 • Weekly synthesis     │
+│     │                 • Content analysis     │
 │     ▼                                       │
 │  SQLite ──── ChromaDB (embedded)            │
 │  (structured)  (vector embeddings)          │
@@ -75,15 +75,13 @@ make
 | Route | Description |
 |-------|-------------|
 | `POST /api/chat/` | Send message to intelligence assistant |
-| `GET /api/chat/briefings/latest` | Latest weekly briefing |
 | `POST /api/feeds/` | Add RSS feed |
 | `GET /api/feeds/` | List feeds |
 | `POST /api/feeds/poll` | Trigger manual poll |
+| `GET /api/episodes/` | List analyzed episodes |
 | `GET /api/analysis/thesis-elements` | Query thesis elements |
-| `GET /api/analysis/frameworks` | Query external frameworks |
-| `GET /api/analysis/blind-spots` | Query detected blind spots |
-| `GET /api/convergence/scorecard` | Prediction accuracy scorecard |
-| `GET /api/convergence/narratives` | Narrative evolution arcs |
+| `GET /api/principles/` | Browse classical reference library |
+| `GET /api/principles/domains` | List classical domains |
 | `GET /api/health` | Health check |
 | `GET /api/status` | System status with stats |
 
@@ -101,7 +99,7 @@ ten31-thoughts/
 ├── frontend/               # React + Vite + Tailwind
 │   └── src/components/
 │       ├── Chat.jsx        # RAG chat interface
-│       ├── Briefings.jsx   # Weekly briefing viewer
+│       ├── Briefings.jsx   # Briefing viewer
 │       ├── Feeds.jsx       # Feed management
 │       └── Status.jsx      # System health dashboard
 └── src/
@@ -111,17 +109,13 @@ ten31-thoughts/
     │   ├── extractor.py    # Content extraction
     │   └── manager.py      # Feed CRUD + polling
     ├── analysis/
-    │   ├── thesis_passes.py    # 3-pass thesis pipeline
-    │   ├── external_passes.py  # 4-pass external pipeline
-    │   └── prompts/templates.py
-    ├── convergence/
-    │   ├── alignment.py    # Agree/diverge mapping
-    │   ├── validation.py   # Prediction tracker
-    │   ├── blindspots.py   # Mutual blind spot detector
-    │   └── narrative.py    # Narrative evolution
+    │   ├── classical_reference.py  # Classical principles library
+    │   ├── connection_pass.py      # Content-to-note connections
+    │   ├── note_extractor.py       # Note extraction from content
+    │   └── prompts/templates.py    # Prompt templates
     ├── synthesis/
-    │   ├── frameworks.py   # Top 5 ranking
-    │   └── briefing.py     # Document generator
+    │   ├── digest.py       # Daily digest generation
+    │   └── briefing.py     # Legacy briefing reader
     ├── llm/router.py       # LiteLLM multi-provider
     ├── db/
     │   ├── models.py       # SQLAlchemy models
@@ -130,8 +124,11 @@ ten31-thoughts/
     ├── api/
     │   ├── feeds.py        # Feed endpoints
     │   ├── analysis.py     # Analysis endpoints
-    │   ├── convergence.py  # Convergence endpoints
-    │   └── chat.py         # Chat + briefing endpoints
+    │   ├── episodes.py     # Episode listing
+    │   ├── principles.py   # Classical library endpoints
+    │   ├── chat.py         # Chat endpoint
+    │   ├── search.py       # Search endpoint
+    │   └── upload.py       # Upload endpoint
     └── worker/
         └── scheduler.py    # APScheduler background jobs
 ```
@@ -141,8 +138,8 @@ ten31-thoughts/
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 1. Feed Manager | Done | RSS ingestion, DB schema, feed CRUD |
-| 2. Analysis | Done | 7-pass LLM pipeline, vector embeddings |
-| 3. Convergence | Done | Alignment, validation, blind spots, narratives |
-| 4. Briefing | Done | Top 5 ranking, document generation |
+| 2. v3 Schema | Done | Notes, connections, signals, spaced repetition |
+| 3. Content Analysis | Done | Connection pass, note extraction |
+| 4. Digest | Done | Daily digest of connections and signals |
 | 5. Chat + UI | Done | RAG chat, React frontend |
 | 6. StartOS | Done | Single Dockerfile, manifest, s9pk packaging |

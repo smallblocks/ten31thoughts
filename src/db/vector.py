@@ -1,6 +1,6 @@
 """
 Ten31 Thoughts - Vector Store
-ChromaDB integration for semantic search over transcript chunks and analysis results.
+ChromaDB integration for semantic search over content, notes, and connections.
 """
 
 import logging
@@ -17,13 +17,12 @@ CHUNK_OVERLAP = 200  # overlap between chunks
 
 class VectorStore:
     """
-    Manages ChromaDB collections for semantic search across all content types.
+    Manages ChromaDB collections for semantic search.
 
     Collections:
     - content_chunks: Raw content text chunks (transcripts, articles)
-    - thesis_elements: Extracted thesis elements from our content
-    - frameworks: Extracted frameworks from external content
-    - blind_spots: Detected blind spots
+    - notes: Personal notes for the resurfacing engine
+    - connections: Connections between content and notes
     """
 
     def __init__(self, host: Optional[str] = None, port: Optional[int] = None):
@@ -48,18 +47,6 @@ class VectorStore:
         self.content_chunks = self.client.get_or_create_collection(
             name="content_chunks",
             metadata={"description": "Raw content text chunks for RAG retrieval"}
-        )
-        self.thesis_elements = self.client.get_or_create_collection(
-            name="thesis_elements",
-            metadata={"description": "Extracted thesis elements from our content"}
-        )
-        self.frameworks = self.client.get_or_create_collection(
-            name="frameworks",
-            metadata={"description": "Extracted frameworks from external content"}
-        )
-        self.blind_spots = self.client.get_or_create_collection(
-            name="blind_spots",
-            metadata={"description": "Detected analytical blind spots"}
         )
         self.notes = self.client.get_or_create_collection(
             name="notes",
@@ -175,45 +162,6 @@ class VectorStore:
 
         return len(chunks)
 
-    def index_thesis_element(
-        self,
-        element_id: str,
-        claim_text: str,
-        metadata: dict,
-    ):
-        """Index a thesis element for semantic search."""
-        self.thesis_elements.upsert(
-            ids=[element_id],
-            documents=[claim_text],
-            metadatas=[metadata],
-        )
-
-    def index_framework(
-        self,
-        framework_id: str,
-        text: str,
-        metadata: dict,
-    ):
-        """Index an external framework for semantic search."""
-        self.frameworks.upsert(
-            ids=[framework_id],
-            documents=[text],
-            metadatas=[metadata],
-        )
-
-    def index_blind_spot(
-        self,
-        spot_id: str,
-        text: str,
-        metadata: dict,
-    ):
-        """Index a blind spot for semantic search."""
-        self.blind_spots.upsert(
-            ids=[spot_id],
-            documents=[text],
-            metadatas=[metadata],
-        )
-
     # ─── Search ───
 
     def search_content(
@@ -241,63 +189,6 @@ class VectorStore:
 
         return self._format_results(results)
 
-    def search_thesis_elements(
-        self,
-        query: str,
-        n_results: int = 10,
-        topic: Optional[str] = None,
-    ) -> list[dict]:
-        """Search thesis elements semantically."""
-        where = {}
-        if topic:
-            where["topic"] = topic
-
-        results = self.thesis_elements.query(
-            query_texts=[query],
-            n_results=n_results,
-            where=where if where else None,
-        )
-
-        return self._format_results(results)
-
-    def search_frameworks(
-        self,
-        query: str,
-        n_results: int = 10,
-        guest_name: Optional[str] = None,
-    ) -> list[dict]:
-        """Search external frameworks semantically."""
-        where = {}
-        if guest_name:
-            where["guest_name"] = guest_name
-
-        results = self.frameworks.query(
-            query_texts=[query],
-            n_results=n_results,
-            where=where if where else None,
-        )
-
-        return self._format_results(results)
-
-    def search_blind_spots(
-        self,
-        query: str,
-        n_results: int = 10,
-        severity: Optional[str] = None,
-    ) -> list[dict]:
-        """Search blind spots semantically."""
-        where = {}
-        if severity:
-            where["severity"] = severity
-
-        results = self.blind_spots.query(
-            query_texts=[query],
-            n_results=n_results,
-            where=where if where else None,
-        )
-
-        return self._format_results(results)
-
     def search_all(
         self,
         query: str,
@@ -305,13 +196,11 @@ class VectorStore:
     ) -> dict:
         """
         Search across all collections. Returns results grouped by type.
-        Used by the chat RAG pipeline for comprehensive context retrieval.
         """
         return {
             "content": self.search_content(query, n_results_per_collection),
-            "thesis_elements": self.search_thesis_elements(query, n_results_per_collection),
-            "frameworks": self.search_frameworks(query, n_results_per_collection),
-            "blind_spots": self.search_blind_spots(query, n_results_per_collection),
+            "notes": self.search_notes(query, n_results_per_collection),
+            "connections": self.search_connections(query, n_results_per_collection),
         }
 
     # ─── Stats ───
@@ -320,9 +209,6 @@ class VectorStore:
         """Get counts for all collections."""
         return {
             "content_chunks": self.content_chunks.count(),
-            "thesis_elements": self.thesis_elements.count(),
-            "frameworks": self.frameworks.count(),
-            "blind_spots": self.blind_spots.count(),
             "notes": self.notes.count(),
             "connections": self.connections.count(),
         }

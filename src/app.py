@@ -1,6 +1,6 @@
 """
 Ten31 Thoughts - Main Application
-FastAPI application with feed management, chat, and briefing endpoints.
+FastAPI application with feed management, chat, and analysis endpoints.
 Uses APScheduler for background tasks (StartOS requires single container).
 """
 
@@ -15,13 +15,11 @@ from sqlalchemy.orm import Session
 from .db.session import init_db, get_db
 from .api.feeds import router as feeds_router
 from .api.analysis import router as analysis_router
-from .api.convergence import router as convergence_router
 from .api.chat import router as chat_router
-from .api.daily_brief import router as daily_brief_router
-from .api.markets import router as markets_router
 from .api.episodes import router as episodes_router
 from .api.search import router as search_router
 from .api.upload import router as upload_router
+from .api.principles import router as principles_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,14 +35,11 @@ def start_scheduler():
     """Start the APScheduler background task scheduler."""
     global scheduler
     from apscheduler.schedulers.background import BackgroundScheduler
-    from .worker.scheduler import (
-        poll_all_feeds_job, process_analysis_job, weekly_synthesis_job,
-        daily_brief_job, market_matching_job
-    )
+    from .worker.scheduler import poll_all_feeds_job, process_analysis_job
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
-    # Poll feeds daily at 5 AM UTC (new episodes/newsletters don't need more frequent checks)
+    # Poll feeds daily at 5 AM UTC
     scheduler.add_job(poll_all_feeds_job, "cron", hour=5, minute=0,
                       id="poll_feeds", max_instances=1, coalesce=True)
 
@@ -52,20 +47,8 @@ def start_scheduler():
     scheduler.add_job(process_analysis_job, "interval", minutes=1, id="process_analysis",
                       max_instances=1, coalesce=True)
 
-    # Daily intelligence brief at 6 AM UTC
-    scheduler.add_job(daily_brief_job, "cron", hour=6, minute=0,
-                      id="daily_brief", max_instances=1, coalesce=True)
-
-    # Check prediction market resolutions and match new predictions (every 6 hours)
-    scheduler.add_job(market_matching_job, "interval", hours=6,
-                      id="market_matching", max_instances=1, coalesce=True)
-
-    # Weekly synthesis every Sunday at 6 AM UTC
-    scheduler.add_job(weekly_synthesis_job, "cron", day_of_week="sun", hour=6, minute=0,
-                      id="weekly_synthesis", max_instances=1, coalesce=True)
-
     scheduler.start()
-    logger.info("Background scheduler started (poll=5AM, analysis=1min/20items, daily=6AM, markets=6h, synthesis=Sunday 6AM)")
+    logger.info("Background scheduler started (poll=5AM, analysis=1min/20items)")
 
 
 @asynccontextmanager
@@ -87,8 +70,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ten31 Thoughts",
-    description="Macro Intelligence Service - Your thesis vs. the world",
-    version="2.0.0",
+    description="Macro Intelligence Service — v3 connection-first architecture",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -102,19 +85,17 @@ app.add_middleware(
 
 app.include_router(feeds_router)
 app.include_router(analysis_router)
-app.include_router(convergence_router)
 app.include_router(chat_router)
-app.include_router(daily_brief_router)
-app.include_router(markets_router)
 app.include_router(episodes_router)
 app.include_router(search_router)
 app.include_router(upload_router)
+app.include_router(principles_router)
 
 
 @app.get("/api/health")
 def health_check():
     """Health check endpoint for StartOS monitoring."""
-    return {"status": "healthy", "service": "ten31-thoughts", "version": "2.0.0"}
+    return {"status": "healthy", "service": "ten31-thoughts", "version": "3.0.0"}
 
 
 @app.get("/api/status")
@@ -123,7 +104,7 @@ def system_status(session: Session = Depends(get_db)):
     from .feeds.manager import FeedManager
     manager = FeedManager(session)
     stats = manager.get_content_stats()
-    return {"status": "healthy", "version": "2.0.0", "content": stats}
+    return {"status": "healthy", "version": "3.0.0", "content": stats}
 
 
 # Serve the React frontend — MUST be last (catches all unmatched routes)
