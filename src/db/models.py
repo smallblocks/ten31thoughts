@@ -280,6 +280,76 @@ class PredictionMarketLink(Base):
     )
 
 
+class Note(Base):
+    """Personal note used by the resurfacing engine."""
+    __tablename__ = "notes"
+
+    note_id = Column(String, primary_key=True, default=gen_id)
+    title = Column(String(500), nullable=True)
+    body = Column(Text, nullable=False)
+    topic = Column(String, nullable=True)
+    tags = Column(JSON, default=list)
+    source_url = Column(Text, nullable=True)
+    archived = Column(Boolean, default=False)
+    # FSRS spaced-repetition fields
+    fsrs_due = Column(DateTime, nullable=True)
+    fsrs_stability = Column(Float, nullable=True)
+    fsrs_difficulty = Column(Float, nullable=True)
+    fsrs_state = Column(Integer, default=0)
+    fsrs_reps = Column(Integer, default=0)
+    fsrs_lapses = Column(Integer, default=0)
+    fsrs_last_review = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    resurfacing_events = relationship(
+        "ResurfacingEvent", back_populates="note",
+        foreign_keys="[ResurfacingEvent.note_id]",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("idx_note_topic", "topic"),
+        Index("idx_note_archived", "archived"),
+        Index("idx_note_fsrs_due", "fsrs_due"),
+    )
+
+
+class ResurfacingTrigger(str, enum.Enum):
+    SCHEDULED = "scheduled"
+    SEMANTIC_ON_WRITE = "semantic_on_write"
+    NEWS_DRIVEN = "news_driven"
+
+
+class ResurfacingEvent(Base):
+    """Record of a note being surfaced to the user."""
+    __tablename__ = "resurfacing_events"
+
+    event_id = Column(String, primary_key=True, default=gen_id)
+    note_id = Column(String, ForeignKey("notes.note_id"), nullable=False)
+    trigger = Column(SAEnum(ResurfacingTrigger), nullable=False)
+    trigger_item_id = Column(String, ForeignKey("content_items.item_id"), nullable=True)
+    trigger_note_id = Column(String, ForeignKey("notes.note_id"), nullable=True)
+    similarity_score = Column(Float, nullable=True)
+    bridge_text = Column(Text, nullable=True)
+    surfaced_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    digest_date = Column(DateTime, nullable=True)
+    engaged_at = Column(DateTime, nullable=True)
+    dismissed_at = Column(DateTime, nullable=True)
+    rating = Column(Integer, nullable=True)
+
+    # Relationships
+    note = relationship("Note", back_populates="resurfacing_events", foreign_keys=[note_id])
+
+    __table_args__ = (
+        Index("idx_resurfacing_note", "note_id"),
+        Index("idx_resurfacing_trigger", "trigger"),
+        Index("idx_resurfacing_digest", "digest_date"),
+    )
+
+
 class GuestProfile(Base):
     """Profile metadata for external guests — social links, bio, ELO rating."""
     __tablename__ = "guest_profiles"

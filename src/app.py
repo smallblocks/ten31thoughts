@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from .db.session import init_db, get_db
 from .api.feeds import router as feeds_router
+from .api.notes import router as notes_router
 from .api.analysis import router as analysis_router
 from .api.convergence import router as convergence_router
 from .api.chat import router as chat_router
@@ -101,6 +102,7 @@ app.add_middleware(
 )
 
 app.include_router(feeds_router)
+app.include_router(notes_router)
 app.include_router(analysis_router)
 app.include_router(convergence_router)
 app.include_router(chat_router)

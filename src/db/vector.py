@@ -61,6 +61,44 @@ class VectorStore:
             name="blind_spots",
             metadata={"description": "Detected analytical blind spots"}
         )
+        self.notes = self.client.get_or_create_collection(
+            name="notes",
+            metadata={"description": "Personal notes for the resurfacing engine"}
+        )
+
+    # ─── Notes ───
+
+    def index_note(
+        self,
+        note_id: str,
+        body: str,
+        metadata: dict,
+    ):
+        """Index or update a personal note for semantic search."""
+        self.notes.upsert(
+            ids=[note_id],
+            documents=[body],
+            metadatas=[metadata],
+        )
+
+    def search_notes(
+        self,
+        query: str,
+        n_results: int = 10,
+        topic: Optional[str] = None,
+    ) -> list[dict]:
+        """Search notes semantically."""
+        where = {}
+        if topic:
+            where["topic"] = topic
+
+        results = self.notes.query(
+            query_texts=[query],
+            n_results=n_results,
+            where=where if where else None,
+        )
+
+        return self._format_results(results)
 
     # ─── Content Chunking & Indexing ───
 
@@ -245,6 +283,7 @@ class VectorStore:
             "thesis_elements": self.thesis_elements.count(),
             "frameworks": self.frameworks.count(),
             "blind_spots": self.blind_spots.count(),
+            "notes": self.notes.count(),
         }
 
     # ─── Helpers ───
