@@ -41,8 +41,7 @@ def start_scheduler():
     global scheduler
     from apscheduler.schedulers.background import BackgroundScheduler
     from .worker.scheduler import (
-        poll_all_feeds_job, process_analysis_job, weekly_synthesis_job,
-        daily_brief_job, market_matching_job
+        poll_all_feeds_job, process_connection_job, weekly_synthesis_job,
     )
 
     scheduler = BackgroundScheduler(timezone="UTC")
@@ -51,24 +50,16 @@ def start_scheduler():
     scheduler.add_job(poll_all_feeds_job, "cron", hour=5, minute=0,
                       id="poll_feeds", max_instances=1, coalesce=True)
 
-    # Process analysis queue every minute (20 items per batch)
-    scheduler.add_job(process_analysis_job, "interval", minutes=1, id="process_analysis",
-                      max_instances=1, coalesce=True)
+    # v3: Connection-first analysis every minute (20 items per batch)
+    scheduler.add_job(process_connection_job, "interval", minutes=1,
+                      id="process_connection", max_instances=1, coalesce=True)
 
-    # Daily intelligence brief at 6 AM UTC
-    scheduler.add_job(daily_brief_job, "cron", hour=6, minute=0,
-                      id="daily_brief", max_instances=1, coalesce=True)
-
-    # Check prediction market resolutions and match new predictions (every 6 hours)
-    scheduler.add_job(market_matching_job, "interval", hours=6,
-                      id="market_matching", max_instances=1, coalesce=True)
-
-    # Weekly synthesis every Sunday at 6 AM UTC
+    # Weekly synthesis every Sunday at 6 AM UTC (placeholder until Step 8 digest)
     scheduler.add_job(weekly_synthesis_job, "cron", day_of_week="sun", hour=6, minute=0,
                       id="weekly_synthesis", max_instances=1, coalesce=True)
 
     scheduler.start()
-    logger.info("Background scheduler started (poll=5AM, analysis=1min/20items, daily=6AM, markets=6h, synthesis=Sunday 6AM)")
+    logger.info("Background scheduler started (poll=5AM, connection=1min/20items, synthesis=Sunday 6AM)")
 
 
 @asynccontextmanager
