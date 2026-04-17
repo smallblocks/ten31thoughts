@@ -28,6 +28,9 @@ python-docx==1.1.2
 # Retry logic
 tenacity==8.2.3
 
+# Spaced repetition (FSRS algorithm — for resurfacing engine)
+fsrs==6.3.1
+
 # Utilities
 python-dateutil==2.9.0
 pydantic==2.9.0
