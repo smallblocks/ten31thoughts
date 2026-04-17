@@ -25,6 +25,93 @@ concurrency:
 jobs:
   build:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    uses: start9labs/shared-workflows/.github/workflows/build.yml@master
-    secrets:
-      DEV_KEY: ${{ secrets.DEV_KEY }}
+    runs-on: ubuntu-latest
+    outputs:
+      s9pk_matrix: ${{ steps.build.outputs.s9pk_matrix }}
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install system dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            libclang-dev \
+            squashfs-tools-ng \
+            qemu-user-static
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install start-cli
+        run: |
+          ARCH=$(uname -m)
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ASSET_NAME="start-cli_${ARCH}-${OS}"
+          DOWNLOAD_URL=$(curl -fsS \
+            -H "Authorization: token ${{ github.token }}" \
+            https://api.github.com/repos/Start9Labs/start-os/releases \
+            | jq -r '[.[].assets[] | select(.name=="'"$ASSET_NAME"'")] | first | .browser_download_url')
+          if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then
+            echo "Error: Could not find asset '$ASSET_NAME' in Start9Labs/start-os releases"
+            exit 1
+          fi
+          curl -fsSL \
+            -H "Authorization: token ${{ github.token }}" \
+            -H "Accept: application/octet-stream" \
+            "$DOWNLOAD_URL" -o /tmp/start-cli
+          sudo install -m 755 /tmp/start-cli /usr/local/bin/start-cli
+          rm /tmp/start-cli
+          echo ""
+          echo "start-cli: $(start-cli --version)"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup signing key
+        run: |
+          if [ -n "${{ secrets.DEV_KEY }}" ]; then
+            mkdir -p ~/.startos
+            printf '%s' "${{ secrets.DEV_KEY }}" > ~/.startos/developer.key.pem
+          else
+            start-cli init-key
+          fi
+
+      - name: Build the service packages
+        id: build
+        run: |
+          RUST_LOG=debug RUST_BACKTRACE=1 make
+          S9PK_JSON=$(ls *.s9pk | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "s9pk_matrix=${S9PK_JSON}" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "SHA256SUMs:"
+          sha256sum *.s9pk
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-output
+          path: ./*.s9pk
+          compression-level: 0
+          retention-days: 1
+
+  UploadArtifacts:
+    needs: build
+    uses: start9labs/shared-workflows/.github/workflows/uploadArtifacts.yml@master
+    with:
+      s9pk_matrix: ${{ needs.build.outputs.s9pk_matrix }}
