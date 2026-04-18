@@ -24,12 +24,27 @@ function TagChip({ tag }) {
   )
 }
 
+function TierBadge({ tier }) {
+  if (!tier) return null
+  const colors = {
+    axiom: 'bg-red-900/40 text-red-300 border-red-800',
+    thesis: 'bg-amber-900/40 text-amber-300 border-amber-800',
+    observation: 'bg-gray-700 text-gray-300 border-gray-600',
+  }
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded border ${colors[tier] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>
+      {tier}
+    </span>
+  )
+}
+
 function SourceBadge({ source }) {
   if (!source) return null
   const colors = {
     manual: 'bg-blue-900/40 text-blue-300 border-blue-800',
     timestamp: 'bg-amber-900/40 text-amber-300 border-amber-800',
-    promoted: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
+    timestamp_synopsis: 'bg-amber-900/40 text-amber-300 border-amber-800',
+    trusted_external: 'bg-cyan-900/40 text-cyan-300 border-cyan-800',
     promoted_from_connection: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
     promoted_from_signal: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
   }
@@ -79,11 +94,50 @@ function ConnectionCard({ conn }) {
   )
 }
 
+function ResurfacingHistory({ noteId }) {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/resurfacing/?limit=10`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        // Filter to events for this note
+        setEvents(data.filter(e => e.note_id === noteId))
+      })
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false))
+  }, [noteId])
+
+  if (loading) return <p className="text-sm text-text-secondary">Loading...</p>
+  if (events.length === 0) return <p className="text-sm text-text-secondary">No resurfacing events yet.</p>
+
+  return (
+    <div className="space-y-2">
+      {events.map(event => (
+        <div key={event.event_id} className="border border-border rounded-lg p-3 bg-surface">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs bg-purple-900/40 text-purple-300 border border-purple-800 px-2 py-0.5 rounded">
+              {event.trigger.replace(/_/g, ' ')}
+            </span>
+            <span className="text-xs font-mono text-text-secondary">
+              {new Date(event.surfaced_at).toLocaleDateString()}
+            </span>
+            {event.rating && <span className="text-xs text-amber-400">{'★'.repeat(event.rating)}</span>}
+          </div>
+          {event.bridge_text && <p className="text-xs text-text-secondary">{event.bridge_text}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EditForm({ note, onSave, onCancel }) {
   const [title, setTitle] = useState(note.title || '')
   const [body, setBody] = useState(note.body || '')
   const [topic, setTopic] = useState(note.topic || '')
   const [tags, setTags] = useState((note.tags || []).join(', '))
+  const [convictionTier, setConvictionTier] = useState(note.conviction_tier || '')
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e) {
@@ -97,6 +151,7 @@ function EditForm({ note, onSave, onCancel }) {
         body: body.trim(),
         topic: topic || null,
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        conviction_tier: convictionTier || null,
       })
     } finally {
       setSaving(false)
@@ -122,7 +177,7 @@ function EditForm({ note, onSave, onCancel }) {
         className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-secondary focus:outline-none focus:border-brand-accent resize-y"
       />
       
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <select
           value={topic}
           onChange={e => setTopic(e.target.value)}
@@ -132,6 +187,17 @@ function EditForm({ note, onSave, onCancel }) {
           {TOPICS.map(t => (
             <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
           ))}
+        </select>
+
+        <select
+          value={convictionTier}
+          onChange={e => setConvictionTier(e.target.value)}
+          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-brand-accent"
+        >
+          <option value="">No tier</option>
+          <option value="axiom">Axiom</option>
+          <option value="thesis">Thesis</option>
+          <option value="observation">Observation</option>
         </select>
         
         <input
@@ -281,6 +347,7 @@ export default function NoteDetail() {
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   <TopicBadge topic={note.topic} />
                   <SourceBadge source={note.source} />
+                  <TierBadge tier={note.conviction_tier} />
                   {(note.tags || []).map(t => <TagChip key={t} tag={t} />)}
                   <span className="text-xs font-mono text-text-secondary">
                     Created {new Date(note.created_at).toLocaleDateString()}
@@ -361,14 +428,12 @@ export default function NoteDetail() {
           )}
         </div>
         
-        {/* Resurfacing history placeholder */}
+        {/* Resurfacing History */}
         <div>
           <h3 className="text-sm font-medium text-text-secondary uppercase tracking-wider mb-3">
             Resurfacing History
           </h3>
-          <p className="text-sm text-text-secondary">
-            Resurfacing history not yet available via API.
-          </p>
+          <ResurfacingHistory noteId={noteId} />
         </div>
       </div>
     </div>

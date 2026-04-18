@@ -162,7 +162,7 @@ class NoteExtractor:
                     body=body,
                     topic=topic,
                     tags=note_tags,
-                    source="timestamp",
+                    source="timestamp_synopsis",
                     source_item_id=item_id,
                     source_url=item.url,
                 )
@@ -202,7 +202,7 @@ class NoteExtractor:
         recent_notes = (
             self.session.query(Note)
             .filter(
-                Note.source == "timestamp",
+                Note.source.in_(["timestamp", "timestamp_synopsis"]),
                 Note.updated_at >= cutoff,
             )
             .order_by(Note.updated_at.desc())

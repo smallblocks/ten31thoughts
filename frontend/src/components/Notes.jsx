@@ -10,8 +10,8 @@ const TOPICS = [
 const SOURCE_OPTIONS = [
   { value: '', label: 'All Sources' },
   { value: 'manual', label: 'Manual' },
-  { value: 'timestamp', label: 'Timestamp' },
-  { value: 'promoted', label: 'Promoted' },
+  { value: 'timestamp', label: 'Timestamp (legacy)' },
+  { value: 'timestamp_synopsis', label: 'Timestamp Synopsis' },
   { value: 'promoted_from_connection', label: 'From Connection' },
   { value: 'promoted_from_signal', label: 'From Signal' },
 ]
@@ -33,12 +33,26 @@ function TagChip({ tag }) {
   )
 }
 
+function TierBadge({ tier }) {
+  if (!tier) return null
+  const colors = {
+    axiom: 'bg-red-900/40 text-red-300 border-red-800',
+    thesis: 'bg-amber-900/40 text-amber-300 border-amber-800',
+    observation: 'bg-gray-700 text-gray-300 border-gray-600',
+  }
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded border ${colors[tier] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>
+      {tier}
+    </span>
+  )
+}
+
 function SourceBadge({ source }) {
   if (!source) return null
   const colors = {
     manual: 'bg-blue-900/40 text-blue-300 border-blue-800',
     timestamp: 'bg-amber-900/40 text-amber-300 border-amber-800',
-    promoted: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
+    timestamp_synopsis: 'bg-amber-900/40 text-amber-300 border-amber-800',
     promoted_from_connection: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
     promoted_from_signal: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
   }
@@ -71,6 +85,7 @@ function NoteCard({ note, onClick }) {
       <div className="flex flex-wrap items-center gap-2 mt-2">
         <TopicBadge topic={note.topic} />
         <SourceBadge source={note.source} />
+        <TierBadge tier={note.conviction_tier} />
         {(note.tags || []).slice(0, 3).map(t => <TagChip key={t} tag={t} />)}
         {(note.tags || []).length > 3 && (
           <span className="text-xs text-text-secondary">+{(note.tags || []).length - 3}</span>
@@ -94,6 +109,7 @@ export default function Notes() {
   const [filterTopic, setFilterTopic] = useState('')
   const [filterTag, setFilterTag] = useState('')
   const [filterSource, setFilterSource] = useState('')
+  const [filterTier, setFilterTier] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [sortBy, setSortBy] = useState('recent')
 
@@ -118,6 +134,9 @@ export default function Notes() {
       // Client-side filters
       if (filterSource) {
         data = data.filter(n => (n.source || 'manual') === filterSource)
+      }
+      if (filterTier) {
+        data = data.filter(n => n.conviction_tier === filterTier)
       }
       if (search) {
         const searchLower = search.toLowerCase()
@@ -195,6 +214,17 @@ export default function Notes() {
           {SOURCE_OPTIONS.map(s => (
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
+        </select>
+
+        <select
+          value={filterTier}
+          onChange={e => setFilterTier(e.target.value)}
+          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-brand-accent"
+        >
+          <option value="">All Tiers</option>
+          <option value="axiom">Axiom</option>
+          <option value="thesis">Thesis</option>
+          <option value="observation">Observation</option>
         </select>
 
         <select

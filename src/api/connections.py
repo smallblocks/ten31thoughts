@@ -73,6 +73,7 @@ class NoteResponse(BaseModel):
     source: Optional[str] = None
     source_item_id: Optional[str] = None
     source_url: Optional[str] = None
+    conviction_tier: Optional[str] = None
     created_at: str
 
     class Config:
@@ -135,6 +136,7 @@ def _note_to_response(note: Note) -> NoteResponse:
         source=note.source,
         source_item_id=note.source_item_id,
         source_url=note.source_url,
+        conviction_tier=note.conviction_tier,
         created_at=note.created_at.isoformat(),
     )
 

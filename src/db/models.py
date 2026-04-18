@@ -318,8 +318,9 @@ class Note(Base):
     fsrs_lapses = Column(Integer, default=0)
     fsrs_last_review = Column(DateTime, nullable=True)
     # v3 source tracking
-    source = Column(String, nullable=True)  # "manual" | "timestamp" | "promoted_from_connection" | "promoted_from_signal"
+    source = Column(String, nullable=True)  # "manual" | "timestamp" | "timestamp_synopsis" | "promoted_from_connection" | "promoted_from_signal"
     source_item_id = Column(String, ForeignKey("content_items.item_id"), nullable=True)
+    conviction_tier = Column(String, nullable=True)  # "axiom" | "thesis" | "observation" | None
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
@@ -336,6 +337,7 @@ class Note(Base):
         Index("idx_note_topic", "topic"),
         Index("idx_note_archived", "archived"),
         Index("idx_note_fsrs_due", "fsrs_due"),
+        Index("idx_note_conviction_tier", "conviction_tier"),
     )
 
 

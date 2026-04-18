@@ -21,6 +21,14 @@ from ..llm.router import LLMRouter
 
 logger = logging.getLogger(__name__)
 
+# ─── Scoring Weights ───
+
+TIER_WEIGHT = {"axiom": 3.0, "thesis": 2.0, "observation": 1.0, None: 1.0}
+RELATION_WEIGHT = {
+    "contradicts": 2.5, "complicates": 1.8, "echoes_mechanism": 1.5,
+    "extends": 1.2, "reinforces": 1.0,
+}
+
 DIGEST_SYSTEM_PROMPT = """\
 You are writing the weekly digest for Ten31, a bitcoin-focused investment platform.
 Write in the Timestamp voice: analytical, not reportorial. Connect themes across sections.
@@ -33,9 +41,12 @@ You will receive structured data for six sections. Write 800-1200 words of prose
 4. Calls out what deserves more attention
 
 Do NOT invent data. Every claim must be grounded in the structured data provided.
+5. LEAD WITH CHALLENGES — contradictions against axioms and theses deserve prominence
+
 Return your response as a JSON object with these keys:
 - "opening": A 2-3 sentence lead paragraph (the single most important takeaway)
 - "connections_prose": Prose for the strongest connections section
+- "challenges_prose": Prose for the sharpest challenges section (contradictions/complications against core beliefs)
 - "threads_prose": Prose for the threads in motion section
 - "signals_prose": Prose for the unconnected signals section
 - "resurfaced_prose": Prose for the resurfaced notes section
@@ -68,9 +79,10 @@ class DigestGenerator:
             period_end = datetime.now(timezone.utc)
         period_start = period_end - timedelta(days=7)
 
-        # Gather structured data for all six sections
+        # Gather structured data for all sections
         sections = {
             "strongest_connections": self._gather_connections(period_start, period_end),
+            "sharpest_challenges": self._gather_challenges(period_start, period_end),
             "threads_in_motion": self._gather_threads(period_start, period_end),
             "unconnected_signals": self._gather_signals(period_start, period_end),
             "notes_resurfaced": self._gather_resurfacing(period_start, period_end),
@@ -121,9 +133,11 @@ class DigestGenerator:
         scored = []
         for c in connections:
             rating = c.user_rating if c.user_rating is not None else 3
-            score = c.strength * rating / 5.0
             item = c.item
             note = c.note
+            tier_weight = TIER_WEIGHT.get(note.conviction_tier if note else None, 1.0)
+            relation_weight = RELATION_WEIGHT.get(c.relation, 1.0)
+            score = c.strength * (rating / 5.0) * tier_weight * relation_weight
             scored.append({
                 "connection_id": c.connection_id,
                 "articulation": c.articulation,
@@ -131,6 +145,9 @@ class DigestGenerator:
                 "strength": c.strength,
                 "user_rating": c.user_rating,
                 "score": round(score, 4),
+                "tier_weight_applied": tier_weight,
+                "relation_weight_applied": relation_weight,
+                "conviction_tier": note.conviction_tier if note else None,
                 "source_title": item.title if item else None,
                 "source_date": item.published_date.isoformat() if item and item.published_date else None,
                 "note_body": note.body if note else None,
@@ -235,15 +252,24 @@ class DigestGenerator:
         return result
 
     def _gather_written(self, start: datetime, end: datetime) -> dict:
-        """Section 5: What you wrote — manual notes + Timestamp content."""
+        """Section 5: What you wrote — user's actual notes + Timestamp content consumed."""
         manual_notes = (
             self.session.query(Note)
             .filter(
                 Note.created_at.between(start, end),
                 or_(
-                    Note.source != "timestamp",
+                    Note.source.in_(["manual", "promoted_from_connection", "promoted_from_signal"]),
                     Note.source.is_(None),
                 ),
+            )
+            .all()
+        )
+
+        timestamp_notes = (
+            self.session.query(Note)
+            .filter(
+                Note.created_at.between(start, end),
+                Note.source.in_(["timestamp", "timestamp_synopsis"]),
             )
             .all()
         )
@@ -259,7 +285,7 @@ class DigestGenerator:
         )
 
         return {
-            "manual_notes": [
+            "your_notes": [
                 {
                     "note_id": n.note_id,
                     "title": n.title,
@@ -268,6 +294,16 @@ class DigestGenerator:
                     "created_at": n.created_at.isoformat() if n.created_at else None,
                 }
                 for n in manual_notes
+            ],
+            "timestamp_synopsis": [
+                {
+                    "note_id": n.note_id,
+                    "title": n.title,
+                    "body": n.body[:300] if n.body else None,
+                    "source": n.source,
+                    "created_at": n.created_at.isoformat() if n.created_at else None,
+                }
+                for n in timestamp_notes
             ],
             "timestamp_items": [
                 {
@@ -278,6 +314,42 @@ class DigestGenerator:
                 for i in timestamp_items
             ],
         }
+
+    def _gather_challenges(self, start: datetime, end: datetime) -> list[dict]:
+        """New Section: Sharpest Challenges — contradictions/complications against high-tier notes."""
+        connections = (
+            self.session.query(Connection)
+            .join(Note, Connection.note_id == Note.note_id)
+            .filter(
+                Connection.created_at.between(start, end),
+                Connection.relation.in_(["contradicts", "complicates"]),
+                Note.conviction_tier.in_(["axiom", "thesis"]),
+            )
+            .all()
+        )
+
+        scored = []
+        for c in connections:
+            note = c.note
+            item = c.item
+            tier_w = TIER_WEIGHT.get(note.conviction_tier, 1.0) if note else 1.0
+            rel_w = RELATION_WEIGHT.get(c.relation, 1.0)
+            score = c.strength * tier_w * rel_w
+
+            scored.append({
+                "connection_id": c.connection_id,
+                "articulation": c.articulation,
+                "relation": c.relation,
+                "strength": c.strength,
+                "score": round(score, 4),
+                "note_title": note.title if note else None,
+                "note_body": note.body[:200] if note and note.body else None,
+                "note_conviction_tier": note.conviction_tier if note else None,
+                "source_title": item.title if item else None,
+            })
+
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:5]
 
     def _gather_sources(self, start: datetime, end: datetime) -> list[dict]:
         """Section 6: Sources active — content items by feed."""
@@ -312,6 +384,7 @@ class DigestGenerator:
             return {
                 "opening": "Digest synthesis unavailable this week.",
                 "connections_prose": "",
+                "challenges_prose": "",
                 "threads_prose": "",
                 "signals_prose": "",
                 "resurfaced_prose": "",
@@ -391,13 +464,39 @@ class DigestGenerator:
             </div>
             """
 
+        # Section: Sharpest Challenges
+        challenges_html = ""
+        for ch in sections.get("sharpest_challenges", []):
+            tier_label = (ch.get("note_conviction_tier") or "note").upper()
+            challenges_html += f"""
+            <div class="card challenge">
+                <div class="badge challenge-badge">{ch.get('relation', '')}</div>
+                <span class="tier-label">{tier_label}</span>
+                <p class="articulation">{ch.get('articulation', '')}</p>
+                <div class="meta">
+                    Challenges: {ch.get('note_title') or (ch.get('note_body', '')[:60])} |
+                    Source: {ch.get('source_title', 'Unknown')} |
+                    Score: {ch.get('score', 0):.2f}
+                </div>
+            </div>
+            """
+
         # Section 5: What you wrote
         written = sections.get("what_you_wrote", {})
         written_html = ""
-        for n in written.get("manual_notes", []):
+        for n in written.get("your_notes", []):
             written_html += f"""
             <div class="card">
                 <strong>{n.get('title') or 'Untitled note'}</strong>
+                <p>{(n.get('body') or '')[:200]}</p>
+            </div>
+            """
+        # Timestamp Synopsis subsection
+        synopsis_html = ""
+        for n in written.get("timestamp_synopsis", []):
+            synopsis_html += f"""
+            <div class="card">
+                <strong>{n.get('title') or 'Synopsis note'}</strong>
                 <p>{(n.get('body') or '')[:200]}</p>
             </div>
             """
@@ -433,6 +532,9 @@ class DigestGenerator:
     .card {{ background: #f8f9fa; border-left: 4px solid #e94560; padding: 16px;
              margin: 12px 0; border-radius: 0 6px 6px 0; }}
     .card.signal {{ border-left-color: #f59e0b; }}
+    .card.challenge {{ border-left-color: #dc2626; }}
+    .badge.challenge-badge {{ background: #dc2626; }}
+    .tier-label {{ display: inline-block; font-size: 10px; color: #dc2626; text-transform: uppercase; letter-spacing: 1px; margin-left: 8px; }}
     .badge {{ display: inline-block; background: #e94560; color: white;
               padding: 2px 8px; border-radius: 3px; font-size: 11px;
               text-transform: uppercase; margin-bottom: 8px; }}
@@ -458,6 +560,10 @@ class DigestGenerator:
 <div class="prose">{prose.get('connections_prose', '')}</div>
 {connections_html or '<p class="meta">No connections this week.</p>'}
 
+<h2>Sharpest Challenges This Week</h2>
+<div class="prose">{prose.get('challenges_prose', '')}</div>
+{challenges_html or '<p class="meta">No challenges to core beliefs this week.</p>'}
+
 <h2>Threads in Motion</h2>
 <div class="prose">{prose.get('threads_prose', '')}</div>
 {threads_html or '<p class="meta">No active threads this week.</p>'}
@@ -473,6 +579,8 @@ class DigestGenerator:
 <h2>What You Wrote</h2>
 <div class="prose">{prose.get('wrote_prose', '')}</div>
 {written_html or '<p class="meta">Quiet writing week.</p>'}
+
+{f'<h3>Timestamp Synopsis</h3>{synopsis_html}' if synopsis_html else ''}
 
 <h2>Sources Active</h2>
 <div class="prose">{prose.get('sources_prose', '')}</div>

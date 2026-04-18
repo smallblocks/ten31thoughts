@@ -32,6 +32,7 @@ class CreateNoteRequest(BaseModel):
     topic: Optional[str] = Field(None, description="Same vocabulary as ThesisElement.topic")
     tags: list[str] = Field(default_factory=list)
     source_url: Optional[str] = None
+    conviction_tier: Optional[str] = Field(None, description="axiom | thesis | observation")
 
 
 class UpdateNoteRequest(BaseModel):
@@ -40,6 +41,7 @@ class UpdateNoteRequest(BaseModel):
     topic: Optional[str] = None
     tags: Optional[list[str]] = None
     source_url: Optional[str] = None
+    conviction_tier: Optional[str] = None
 
 
 class NoteResponse(BaseModel):
@@ -55,6 +57,7 @@ class NoteResponse(BaseModel):
     fsrs_due: Optional[str]
     fsrs_state: int
     fsrs_reps: int
+    conviction_tier: Optional[str]
 
     class Config:
         from_attributes = True
@@ -76,6 +79,7 @@ def note_to_response(note: Note) -> NoteResponse:
         fsrs_due=note.fsrs_due.isoformat() if note.fsrs_due else None,
         fsrs_state=note.fsrs_state,
         fsrs_reps=note.fsrs_reps,
+        conviction_tier=note.conviction_tier,
     )
 
 
@@ -123,6 +127,11 @@ def create_note(
     if title == "":
         title = None
 
+    # Validate conviction_tier
+    if request.conviction_tier is not None:
+        if request.conviction_tier not in ("axiom", "thesis", "observation"):
+            raise HTTPException(status_code=400, detail="conviction_tier must be axiom, thesis, or observation")
+
     note = Note(
         note_id=gen_id(),
         title=title,
@@ -131,6 +140,7 @@ def create_note(
         tags=request.tags,
         source_url=request.source_url,
         archived=False,
+        conviction_tier=request.conviction_tier,
     )
     session.add(note)
     session.commit()
@@ -220,6 +230,11 @@ def update_note(
 
     if request.source_url is not None:
         note.source_url = request.source_url or None
+
+    if request.conviction_tier is not None:
+        if request.conviction_tier not in ("axiom", "thesis", "observation", ""):
+            raise HTTPException(status_code=400, detail="conviction_tier must be axiom, thesis, or observation")
+        note.conviction_tier = request.conviction_tier or None
 
     session.commit()
     session.refresh(note)
