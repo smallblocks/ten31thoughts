@@ -1,53 +1,79 @@
-import React, { useState } from 'react'
-import Chat from './components/Chat'
-import Feeds from './components/Feeds'
-import Briefings from './components/Briefings'
-import Status from './components/Status'
+import React from 'react'
+import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import ThisWeek from './components/ThisWeek'
+import Notes from './components/Notes'
+import NoteDetail from './components/NoteDetail'
+import Connections from './components/Connections'
+import Signals from './components/Signals'
+import Sources from './components/Sources'
+import Ask from './components/Ask'
+import System from './components/System'
 
-const TABS = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'briefings', label: 'Briefings', icon: '📋' },
-  { id: 'feeds', label: 'Feeds', icon: '📡' },
-  { id: 'status', label: 'Status', icon: '⚙️' },
-]
+function Header() {
+  const location = useLocation()
+  
+  const navItems = [
+    { path: '/', label: 'This Week' },
+    { path: '/notes', label: 'Notes' },
+    { path: '/connections', label: 'Connections' },
+    { path: '/sources', label: 'Sources' },
+    { path: '/ask', label: 'Ask' },
+  ]
 
-export default function App() {
-  const [tab, setTab] = useState('chat')
+  function isActive(path) {
+    if (path === '/') {
+      return location.pathname === '/'
+    }
+    return location.pathname.startsWith(path)
+  }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-brand-accent flex items-center justify-center text-sm font-semibold text-white">T</div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">Ten31 Thoughts</h1>
-            <p className="text-xs text-gray-500">Macro Intelligence Service</p>
-          </div>
-        </div>
-        <nav className="flex gap-1">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                tab === t.id
-                  ? 'bg-gray-800 text-white'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
-              }`}
-            >
-              <span className="mr-1.5">{t.icon}</span>{t.label}
-            </button>
-          ))}
-        </nav>
-      </header>
+    <header className="h-12 border-b border-border bg-surface flex items-center justify-between px-6">
+      <Link to="/" className="font-mono text-sm tracking-wider text-text-primary">
+        TEN31
+      </Link>
+      
+      <nav className="flex items-center gap-8">
+        {navItems.map(({ path, label }) => (
+          <Link
+            key={path}
+            to={path}
+            className={`text-sm transition-colors relative ${
+              isActive(path)
+                ? 'text-text-primary border-b-2 border-brand-accent'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
 
-      {/* Content */}
+      <Link 
+        to="/system" 
+        className="text-xs text-text-secondary hover:text-text-primary transition-colors"
+      >
+        system
+      </Link>
+    </header>
+  )
+}
+
+export default function App() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
       <main className="flex-1 overflow-hidden">
-        {tab === 'chat' && <Chat />}
-        {tab === 'briefings' && <Briefings />}
-        {tab === 'feeds' && <Feeds />}
-        {tab === 'status' && <Status />}
+        <Routes>
+          <Route path="/" element={<ThisWeek />} />
+          <Route path="/notes" element={<Notes />} />
+          <Route path="/notes/:noteId" element={<NoteDetail />} />
+          <Route path="/connections" element={<Connections />} />
+          <Route path="/connections/signals" element={<Signals />} />
+          <Route path="/sources" element={<Sources />} />
+          <Route path="/ask" element={<Ask />} />
+          <Route path="/system" element={<System />} />
+        </Routes>
       </main>
     </div>
   )

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 const RELATION_OPTIONS = [
   { value: '', label: 'All Relations' },
@@ -10,16 +11,16 @@ const RELATION_OPTIONS = [
 ]
 
 const RELATION_COLORS = {
-  reinforces: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
-  extends: 'bg-blue-900/40 text-blue-300 border-blue-800',
-  complicates: 'bg-amber-900/40 text-amber-300 border-amber-800',
-  contradicts: 'bg-red-900/40 text-red-300 border-red-800',
-  echoes_mechanism: 'bg-purple-900/40 text-purple-300 border-purple-800',
+  reinforces: 'bg-emerald-500 text-white',
+  extends: 'bg-blue-500 text-white',
+  complicates: 'bg-amber-500 text-white',
+  contradicts: 'bg-brand-accent text-white',
+  echoes_mechanism: 'bg-purple-500 text-white',
 }
 
 function RelationBadge({ relation }) {
   return (
-    <span className={`text-xs px-2 py-0.5 rounded border ${RELATION_COLORS[relation] || 'bg-gray-800 text-gray-400 border-gray-700'}`}>
+    <span className={`text-xs px-2 py-0.5 rounded ${RELATION_COLORS[relation] || 'bg-gray-800 text-gray-400'}`}>
       {relation.replace(/_/g, ' ')}
     </span>
   )
@@ -33,7 +34,7 @@ function StrengthBar({ strength }) {
       <div className="flex-1 h-1.5 bg-gray-800 rounded-full">
         <div className="h-1.5 bg-brand-accent rounded-full" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-gray-400 font-mono w-8 text-right">{pct}%</span>
+      <span className="text-xs text-text-secondary font-mono w-8 text-right">{pct}%</span>
     </div>
   )
 }
@@ -67,70 +68,80 @@ function ConnectionCard({ conn, onRate, onDismiss, onPromote }) {
     : null
 
   return (
-    <div className="border border-gray-800 rounded-lg p-4 bg-gray-900/20">
-      {/* Source content */}
-      <div className="flex items-start justify-between mb-2">
+    <div className="border border-border rounded-lg p-4 bg-surface">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-2">
             {conn.item_title ? (
               <a href={conn.item_url} target="_blank" rel="noopener noreferrer"
-                className="text-sm font-medium text-white hover:text-brand-accent transition-colors">
+                className="text-sm font-medium text-text-primary hover:text-brand-accent transition-colors">
                 {conn.item_title}
               </a>
             ) : (
-              <span className="text-sm text-gray-400">Unknown source</span>
+              <span className="text-sm text-text-secondary">Unknown source</span>
             )}
             <RelationBadge relation={conn.relation} />
           </div>
+          
+          {/* Full articulation */}
+          <p className="text-sm text-text-primary leading-relaxed mb-3">{conn.articulation}</p>
+          
+          {/* Excerpt */}
+          {conn.excerpt && (
+            <blockquote className="border-l-2 border-border pl-3 mb-3">
+              <p className="text-xs text-text-secondary italic font-serif">{conn.excerpt}</p>
+              {conn.excerpt_location && (
+                <cite className="text-xs text-text-secondary not-italic font-mono">
+                  {conn.excerpt_location}
+                </cite>
+              )}
+            </blockquote>
+          )}
+          
+          {/* Target note preview */}
           {notePreview && (
-            <p className="text-xs text-gray-500 mb-2">
-              → <span className="text-gray-400">{conn.note_title || 'Note'}</span>: {notePreview}
+            <p className="text-xs text-text-secondary mb-3">
+              → <strong>{conn.note_title || 'Note'}:</strong> {notePreview}
             </p>
           )}
         </div>
       </div>
 
-      {/* Articulation */}
-      <p className="text-xs text-gray-300 leading-relaxed mb-2">{conn.articulation}</p>
-
-      {/* Excerpt */}
-      {conn.excerpt && (
-        <blockquote className="border-l-2 border-gray-700 pl-3 mb-2">
-          <p className="text-xs text-gray-400 italic">{conn.excerpt}</p>
-          {conn.excerpt_location && (
-            <cite className="text-xs text-gray-600 not-italic">{conn.excerpt_location}</cite>
-          )}
-        </blockquote>
-      )}
-
-      {/* Principles invoked */}
+      {/* Principles */}
       {conn.principles_invoked && conn.principles_invoked.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div className="flex flex-wrap gap-1 mb-3">
           {conn.principles_invoked.map((p, i) => (
-            <span key={i} className="text-[10px] bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded">
+            <span key={i} className="text-xs bg-gray-800 text-text-secondary px-2 py-0.5 rounded">
               {typeof p === 'string' ? p : p.name || p.principle || JSON.stringify(p)}
             </span>
           ))}
         </div>
       )}
 
-      {/* Strength bar */}
+      {/* Strength */}
       <div className="mb-3">
         <StrengthBar strength={conn.strength} />
       </div>
 
       {/* Actions */}
       <div className="flex items-center justify-between">
-        <StarRating current={conn.user_rating} onRate={rating => onRate(conn.connection_id, rating)} />
+        <StarRating 
+          current={conn.user_rating} 
+          onRate={rating => onRate(conn.connection_id, rating)} 
+        />
         <div className="flex items-center gap-2">
-          <button onClick={() => onPromote(conn.connection_id)}
-            className="text-xs px-2 py-1 rounded bg-gray-800 text-emerald-400 hover:bg-emerald-900/30 transition-colors"
-            title="Promote to Note">
+          <button 
+            onClick={() => onPromote(conn.connection_id)}
+            className="text-xs px-3 py-1 rounded bg-emerald-800 text-emerald-200 hover:bg-emerald-700 transition-colors"
+            title="Promote to Note"
+          >
             → Note
           </button>
-          <button onClick={() => onDismiss(conn.connection_id)}
-            className="text-xs px-2 py-1 rounded bg-gray-800 text-red-400 hover:bg-red-900/30 transition-colors"
-            title="Dismiss">
+          <button 
+            onClick={() => onDismiss(conn.connection_id)}
+            className="text-xs px-3 py-1 rounded bg-gray-800 text-red-400 hover:bg-red-900/30 transition-colors"
+            title="Dismiss"
+          >
             ✕
           </button>
         </div>
@@ -139,55 +150,30 @@ function ConnectionCard({ conn, onRate, onDismiss, onPromote }) {
   )
 }
 
-function SignalCard({ signal, onDismiss, onPromote }) {
-  return (
-    <div className="border border-gray-800 rounded-lg p-4 bg-gray-900/20">
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex-1">
-          {signal.item_title && (
-            <a href={signal.item_url} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-gray-500 hover:text-brand-accent transition-colors">
-              {signal.item_title}
-            </a>
-          )}
-          <h4 className="text-sm font-medium text-white mt-1">{signal.topic_summary}</h4>
-        </div>
-      </div>
-      <p className="text-xs text-gray-300 leading-relaxed mb-3">{signal.why_it_matters}</p>
-      {signal.excerpt && (
-        <blockquote className="border-l-2 border-gray-700 pl-3 mb-3">
-          <p className="text-xs text-gray-400 italic">{signal.excerpt}</p>
-        </blockquote>
-      )}
-      <div className="flex items-center justify-end gap-2">
-        <button onClick={() => onPromote(signal.signal_id)}
-          className="text-xs px-2 py-1 rounded bg-gray-800 text-emerald-400 hover:bg-emerald-900/30 transition-colors">
-          → Note
-        </button>
-        <button onClick={() => onDismiss(signal.signal_id)}
-          className="text-xs px-2 py-1 rounded bg-gray-800 text-red-400 hover:bg-red-900/30 transition-colors">
-          ✕
-        </button>
-      </div>
-    </div>
-  )
-}
-
 export default function Connections() {
   const [connections, setConnections] = useState([])
-  const [signals, setSignals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [subTab, setSubTab] = useState('connections')
+  const location = useLocation()
 
   // Filters
   const [filterRelation, setFilterRelation] = useState('')
   const [minStrength, setMinStrength] = useState(0)
+  const [maxStrength, setMaxStrength] = useState(1)
   const [showDismissed, setShowDismissed] = useState(false)
-  const [showRated, setShowRated] = useState(false)
+  const [showRated, setShowRated] = useState(true)
 
-  useEffect(() => { loadConnections() }, [filterRelation, minStrength, showDismissed, showRated])
-  useEffect(() => { if (subTab === 'signals') loadSignals() }, [subTab])
+  // Check if we should show only unrated from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get('unrated') === 'true') {
+      setShowRated(false)
+    }
+  }, [location])
+
+  useEffect(() => {
+    loadConnections()
+  }, [filterRelation, minStrength, maxStrength, showDismissed, showRated])
 
   async function loadConnections() {
     setLoading(true)
@@ -198,11 +184,19 @@ export default function Connections() {
       if (minStrength > 0) params.set('min_strength', minStrength)
       if (!showRated) params.set('unrated', 'true')
       if (showDismissed) params.set('dismissed', 'true')
-      params.set('limit', '50')
+      params.set('limit', '100')
 
       const res = await fetch(`/api/connections/?${params}`)
       if (!res.ok) throw new Error('Failed to load connections')
-      setConnections(await res.json())
+      
+      let data = await res.json()
+      
+      // Client-side strength filter for max
+      if (maxStrength < 1) {
+        data = data.filter(c => c.strength == null || c.strength <= maxStrength)
+      }
+      
+      setConnections(data)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -210,185 +204,141 @@ export default function Connections() {
     }
   }
 
-  async function loadSignals() {
-    try {
-      const res = await fetch('/api/signals/?limit=50')
-      if (res.ok) setSignals(await res.json())
-    } catch (e) {
-      console.error('Failed to load signals:', e)
-    }
-  }
-
   async function rateConnection(id, rating) {
-    const res = await fetch(`/api/connections/${id}/rating`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rating }),
-    })
-    if (res.ok) {
-      setConnections(prev =>
-        prev.map(c => c.connection_id === id ? { ...c, user_rating: rating } : c)
-      )
+    try {
+      const res = await fetch(`/api/connections/${id}/rating`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating }),
+      })
+      if (res.ok) {
+        setConnections(prev =>
+          prev.map(c => c.connection_id === id ? { ...c, user_rating: rating } : c)
+        )
+      }
+    } catch (e) {
+      console.error('Failed to rate connection:', e)
     }
   }
 
   async function dismissConnection(id) {
-    const res = await fetch(`/api/connections/${id}`, { method: 'DELETE' })
-    if (res.ok || res.status === 204) {
-      setConnections(prev => prev.filter(c => c.connection_id !== id))
+    try {
+      const res = await fetch(`/api/connections/${id}`, { method: 'DELETE' })
+      if (res.ok || res.status === 204) {
+        setConnections(prev => prev.filter(c => c.connection_id !== id))
+      }
+    } catch (e) {
+      console.error('Failed to dismiss connection:', e)
     }
   }
 
   async function promoteConnection(id) {
-    const res = await fetch(`/api/connections/${id}/promote`, { method: 'POST' })
-    if (res.ok) {
-      setConnections(prev =>
-        prev.map(c => c.connection_id === id ? { ...c, user_promoted_to_note: true } : c)
-      )
+    try {
+      const res = await fetch(`/api/connections/${id}/promote`, { method: 'POST' })
+      if (res.ok) {
+        setConnections(prev =>
+          prev.map(c => c.connection_id === id ? { ...c, user_promoted_to_note: true } : c)
+        )
+      }
+    } catch (e) {
+      console.error('Failed to promote connection:', e)
     }
   }
 
-  async function dismissSignal(id) {
-    const res = await fetch(`/api/signals/${id}/dismiss`, { method: 'PATCH' })
-    if (res.ok || res.status === 204) {
-      setSignals(prev => prev.filter(s => s.signal_id !== id))
-    }
-  }
-
-  async function promoteSignal(id) {
-    const res = await fetch(`/api/signals/${id}/promote`, { method: 'POST' })
-    if (res.ok) {
-      setSignals(prev => prev.filter(s => s.signal_id !== id))
-    }
-  }
+  if (loading) return <div className="p-6 text-text-secondary">Loading connections...</div>
+  if (error) return <div className="p-6 text-red-400">Error: {error}</div>
 
   return (
     <div className="p-6 max-w-4xl mx-auto overflow-y-auto h-full">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-lg font-medium text-white">Connections</h2>
-          <p className="text-sm text-gray-500">Review how new content relates to your notes</p>
-        </div>
-        {/* Sub-tab toggle */}
-        <div className="flex gap-1 bg-gray-900 rounded-lg p-0.5 border border-gray-800">
-          <button
-            onClick={() => setSubTab('connections')}
-            className={`text-sm px-3 py-1 rounded transition-colors ${
-              subTab === 'connections' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            Connections
-          </button>
-          <button
-            onClick={() => setSubTab('signals')}
-            className={`text-sm px-3 py-1 rounded transition-colors ${
-              subTab === 'signals' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            Signals
-          </button>
+          <h2 className="text-lg font-medium text-text-primary">Connections</h2>
+          <p className="text-sm text-text-secondary">
+            Review how new content relates to your notes ({connections.length} shown)
+          </p>
         </div>
       </div>
 
-      {subTab === 'connections' && (
-        <>
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3 mb-4">
-            <select
-              value={filterRelation}
-              onChange={e => setFilterRelation(e.target.value)}
-              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-brand-accent"
-            >
-              {RELATION_OPTIONS.map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500">Min strength:</label>
-              <input
-                type="range"
-                min="0" max="1" step="0.05"
-                value={minStrength}
-                onChange={e => setMinStrength(parseFloat(e.target.value))}
-                className="w-24"
-              />
-              <span className="text-xs text-gray-400 font-mono w-8">{Math.round(minStrength * 100)}%</span>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showDismissed}
-                onChange={e => setShowDismissed(e.target.checked)}
-                className="rounded bg-gray-800 border-gray-700"
-              />
-              Dismissed
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showRated}
-                onChange={e => setShowRated(e.target.checked)}
-                className="rounded bg-gray-800 border-gray-700"
-              />
-              Show rated
-            </label>
-          </div>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <select
+          value={filterRelation}
+          onChange={e => setFilterRelation(e.target.value)}
+          className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-brand-accent"
+        >
+          {RELATION_OPTIONS.map(r => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
+        </select>
+        
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-text-secondary">Strength:</label>
+          <input
+            type="range"
+            min="0" max="1" step="0.05"
+            value={minStrength}
+            onChange={e => setMinStrength(parseFloat(e.target.value))}
+            className="w-16"
+          />
+          <span className="text-xs font-mono text-text-secondary w-8">
+            {Math.round(minStrength * 100)}%
+          </span>
+          <span className="text-xs text-text-secondary">to</span>
+          <input
+            type="range"
+            min="0" max="1" step="0.05"
+            value={maxStrength}
+            onChange={e => setMaxStrength(parseFloat(e.target.value))}
+            className="w-16"
+          />
+          <span className="text-xs font-mono text-text-secondary w-8">
+            {Math.round(maxStrength * 100)}%
+          </span>
+        </div>
+        
+        <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showRated}
+            onChange={e => setShowRated(e.target.checked)}
+            className="rounded bg-surface border-border"
+          />
+          Show rated
+        </label>
+        
+        <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showDismissed}
+            onChange={e => setShowDismissed(e.target.checked)}
+            className="rounded bg-surface border-border"
+          />
+          Show dismissed
+        </label>
+      </div>
 
-          {loading ? (
-            <div className="text-gray-400 text-sm">Loading connections...</div>
-          ) : error ? (
-            <div className="text-red-400 text-sm">Error: {error}</div>
-          ) : connections.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-xl bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">🔗</span>
-              </div>
-              <h3 className="text-sm font-medium text-white mb-2">No Connections</h3>
-              <p className="text-sm text-gray-400">
-                Connections will appear here as new content is analyzed against your notes.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {connections.map(c => (
-                <ConnectionCard
-                  key={c.connection_id}
-                  conn={c}
-                  onRate={rateConnection}
-                  onDismiss={dismissConnection}
-                  onPromote={promoteConnection}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {subTab === 'signals' && (
-        <>
-          {signals.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 rounded-xl bg-gray-800 flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">📡</span>
-              </div>
-              <h3 className="text-sm font-medium text-white mb-2">No Unconnected Signals</h3>
-              <p className="text-sm text-gray-400">
-                Signals appear when new content doesn't match any existing notes but seems noteworthy.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {signals.map(s => (
-                <SignalCard
-                  key={s.signal_id}
-                  signal={s}
-                  onDismiss={dismissSignal}
-                  onPromote={promoteSignal}
-                />
-              ))}
-            </div>
-          )}
-        </>
+      {/* Connections list */}
+      {connections.length === 0 ? (
+        <div className="text-center py-12">
+          <h3 className="text-sm font-medium text-text-primary mb-2">No connections found</h3>
+          <p className="text-sm text-text-secondary">
+            Connections will appear here as new content is analyzed against your notes.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {connections
+            .sort((a, b) => (b.strength || 0) - (a.strength || 0)) // Sort by strength descending
+            .map(c => (
+              <ConnectionCard
+                key={c.connection_id}
+                conn={c}
+                onRate={rateConnection}
+                onDismiss={dismissConnection}
+                onPromote={promoteConnection}
+              />
+            ))}
+        </div>
       )}
     </div>
   )
