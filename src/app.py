@@ -24,6 +24,7 @@ from .api.connections import router as connections_router
 from .api.connections import signals_router
 from .api.digest import router as digest_router
 from .api.principles import router as principles_router
+from .api.resurfacing import router as resurfacing_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -98,6 +99,7 @@ app.include_router(connections_router)
 app.include_router(signals_router)
 app.include_router(digest_router)
 app.include_router(principles_router)
+app.include_router(resurfacing_router)
 
 
 @app.get("/api/health")

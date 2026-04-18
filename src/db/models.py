@@ -427,6 +427,7 @@ class Digest(Base):
     period_start = Column(DateTime, nullable=False)
     period_end = Column(DateTime, nullable=False)
     html_content = Column(Text, nullable=False)
+    opening = Column(Text, nullable=True)
     raw_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

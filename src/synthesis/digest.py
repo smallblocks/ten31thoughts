@@ -81,6 +81,9 @@ class DigestGenerator:
         # LLM synthesis
         llm_prose = await self._synthesize(sections)
 
+        # Extract opening text from LLM output
+        opening_text = llm_prose.get("opening", None)
+
         # Render HTML
         html_content = self._render_html(sections, llm_prose, period_start, period_end)
 
@@ -90,6 +93,7 @@ class DigestGenerator:
             period_start=period_start,
             period_end=period_end,
             html_content=html_content,
+            opening=opening_text,
             raw_data=sections,
         )
         self.session.add(digest)

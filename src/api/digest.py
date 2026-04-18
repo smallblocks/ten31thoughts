@@ -62,5 +62,6 @@ def _digest_to_dict(digest: Digest) -> dict:
         "period_start": digest.period_start.isoformat() if digest.period_start else None,
         "period_end": digest.period_end.isoformat() if digest.period_end else None,
         "html_content": digest.html_content,
+        "opening": digest.opening,
         "created_at": digest.created_at.isoformat() if digest.created_at else None,
     }

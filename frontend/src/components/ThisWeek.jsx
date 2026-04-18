@@ -29,9 +29,11 @@ function DigestSection({ digest }) {
     )
   }
 
-  // Try to extract first paragraph as pull quote
+  // Use opening field if available, fall back to HTML parsing
   let pullQuote = null
-  if (digest.html_content) {
+  if (digest.opening) {
+    pullQuote = digest.opening
+  } else if (digest.html_content) {
     const match = digest.html_content.match(/<p[^>]*>(.*?)<\/p>/i)
     if (match) {
       const firstPara = match[1].replace(/<[^>]*>/g, '') // Strip HTML tags
