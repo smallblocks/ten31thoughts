@@ -36,7 +36,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.db.models import (
     Base, Feed, ContentItem, FeedCategory, FeedStatus, AnalysisStatus,
-    ThesisElement, ExternalFramework, BlindSpot, gen_id
+    Note, Connection, gen_id
 )
 
 OUTPUT_DIR = PROJECT_ROOT / "output"
@@ -391,8 +391,8 @@ def cmd_analyze(args):
     session, engine = get_db()
 
     from src.llm.router import LLMRouter
-    from src.analysis.thesis_passes import ThesisAnalyzer
-    from src.analysis.external_passes import ExternalAnalyzer
+    from src.analysis.note_extractor import NoteExtractor
+    from src.analysis.connection_pass import ConnectionAnalyzer
     from src.db.vector import VectorStore
 
     llm = LLMRouter()
@@ -439,12 +439,13 @@ def cmd_analyze(args):
                 session.commit()
 
                 if category == FeedCategory.OUR_THESIS:
-                    analyzer = ThesisAnalyzer(llm, session)
+                    extractor = NoteExtractor(llm, session)
+                    result = loop.run_until_complete(extractor.extract(item.item_id))
                 else:
-                    analyzer = ExternalAnalyzer(llm, session)
-                stats = loop.run_until_complete(analyzer.analyze(item))
+                    analyzer = ConnectionAnalyzer(llm, session)
+                    result = loop.run_until_complete(analyzer.analyze(item.item_id))
 
-                # Vector index
+                # Vector index raw content chunks
                 vs.index_content(
                     item_id=item.item_id, content=item.content_text,
                     metadata={
@@ -453,41 +454,18 @@ def cmd_analyze(args):
                         "date": item.published_date.isoformat() if item.published_date else "",
                     }
                 )
-                if category == FeedCategory.OUR_THESIS:
-                    for elem in item.thesis_elements:
-                        vs.index_thesis_element(
-                            element_id=elem.element_id, claim_text=elem.claim_text,
-                            metadata={
-                                "item_id": item.item_id, "topic": elem.topic,
-                                "conviction": elem.conviction.value if elem.conviction else "moderate",
-                                "is_prediction": elem.is_prediction,
-                                "is_data_skepticism": elem.is_data_skepticism,
-                            }
-                        )
-                else:
-                    for fw in item.external_frameworks:
-                        vs.index_framework(
-                            framework_id=fw.framework_id,
-                            text=f"{fw.framework_name}: {fw.description}",
-                            metadata={
-                                "item_id": item.item_id,
-                                "guest_name": fw.guest_name or "",
-                                "time_horizon": fw.time_horizon or "",
-                                "reasoning_score": fw.reasoning_score or 0,
-                            }
-                        )
-                    for spot in item.blind_spots:
-                        vs.index_blind_spot(
-                            spot_id=spot.spot_id,
-                            text=f"{spot.topic}: {spot.description}",
-                            metadata={
-                                "item_id": item.item_id,
-                                "severity": spot.severity,
-                                "source_type": spot.source_type,
-                            }
-                        )
 
-                print(f"OK")
+                # Report what was extracted
+                if category == FeedCategory.OUR_THESIS:
+                    note_count = session.execute(
+                        select(func.count(Note.note_id)).where(Note.source_item_id == item.item_id)
+                    ).scalar()
+                    print(f"OK — {note_count} notes")
+                else:
+                    conn_count = session.execute(
+                        select(func.count(Connection.connection_id)).where(Connection.item_id == item.item_id)
+                    ).scalar()
+                    print(f"OK — {conn_count} connections")
                 analyzed += 1
 
             except KeyboardInterrupt:
