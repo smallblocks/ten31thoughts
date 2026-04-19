@@ -26,7 +26,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.db.models import (
     Base,
-    ThesisElement,
     ContentItem,
     Feed,
     FeedCategory,
@@ -37,6 +36,12 @@ from src.db.models import (
     create_tables,
     get_engine,
 )
+
+# ThesisElement was removed in v4 — import only if available
+try:
+    from src.db.models import ThesisElement
+except ImportError:
+    ThesisElement = None
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +77,9 @@ def _add_note_columns(engine, dry_run: bool = False) -> list[str]:
 
 def _migrate_thesis_elements(session: Session, dry_run: bool = False) -> dict:
     """Migrate ThesisElement rows to Note rows. Returns stats dict."""
+    if ThesisElement is None:
+        logger.info("ThesisElement model removed in v4 — skipping migration step")
+        return {"found": 0, "migrated": 0, "skipped": 0}
     elements = session.query(ThesisElement).all()
     stats = {"found": len(elements), "migrated": 0, "skipped": 0}
 

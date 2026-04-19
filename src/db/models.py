@@ -1,6 +1,6 @@
 """
 Ten31 Thoughts - Database Models
-SQLAlchemy models for feeds, content, thesis elements, frameworks, and predictions.
+SQLAlchemy models for feeds, content, notes, connections, and resurfacing.
 """
 
 import uuid
@@ -45,27 +45,6 @@ class ConnectionRelation(str, enum.Enum):
     COMPLICATES = "complicates"
     CONTRADICTS = "contradicts"
     ECHOES_MECHANISM = "echoes_mechanism"
-
-
-class ConvictionLevel(str, enum.Enum):
-    STRONG = "strong"
-    MODERATE = "moderate"
-    SPECULATIVE = "speculative"
-
-
-class PredictionStatus(str, enum.Enum):
-    PENDING = "pending"
-    PARTIALLY_VALIDATED = "partially_validated"
-    VALIDATED = "validated"
-    INVALIDATED = "invalidated"
-    EXPIRED = "expired"
-
-
-class ThesisAlignment(str, enum.Enum):
-    AGREE = "agree"
-    PARTIAL = "partial"
-    DIVERGE = "diverge"
-    UNRELATED = "unrelated"
 
 
 # ─── Models ───
@@ -121,9 +100,6 @@ class ContentItem(Base):
 
     # Relationships
     feed = relationship("Feed", back_populates="items")
-    thesis_elements = relationship("ThesisElement", back_populates="content_item", cascade="all, delete-orphan")
-    external_frameworks = relationship("ExternalFramework", back_populates="content_item", cascade="all, delete-orphan")
-    blind_spots = relationship("BlindSpot", back_populates="content_item", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_content_hash", "content_hash"),
@@ -133,163 +109,6 @@ class ContentItem(Base):
 
     def __repr__(self):
         return f"<ContentItem {self.title[:50]}>"
-
-
-class ThesisElement(Base):
-    """
-    Extracted thesis element from 'our_thesis' content.
-    Represents a specific macro claim, position, or prediction.
-    """
-    __tablename__ = "thesis_elements"
-
-    element_id = Column(String, primary_key=True, default=gen_id)
-    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
-    claim_text = Column(Text, nullable=False)
-    topic = Column(String, nullable=False)  # fed_policy, labor, fiscal, geopolitics, bitcoin, etc.
-    conviction = Column(SAEnum(ConvictionLevel), default=ConvictionLevel.MODERATE)
-    is_prediction = Column(Boolean, default=False)
-    prediction_outcome = Column(Text, nullable=True)
-    prediction_status = Column(SAEnum(PredictionStatus), default=PredictionStatus.PENDING)
-    prediction_horizon = Column(String, nullable=True)  # "3 months", "end of year", etc.
-    is_data_skepticism = Column(Boolean, default=False)
-    data_series = Column(String, nullable=True)  # NFP, CPI, GDP, etc.
-    alternative_interpretation = Column(Text, nullable=True)
-    thread_id = Column(String, nullable=True)  # links related elements across editions
-    raw_excerpt = Column(Text, nullable=True)  # original text from the newsletter
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    content_item = relationship("ContentItem", back_populates="thesis_elements")
-
-    __table_args__ = (
-        Index("idx_thesis_topic", "topic"),
-        Index("idx_thesis_thread", "thread_id"),
-        Index("idx_thesis_prediction", "is_prediction", "prediction_status"),
-    )
-
-
-# DEPRECATED — drop in future migration
-class ExternalFramework(Base):
-    """
-    DEPRECATED — part of old multi-pass analysis architecture.
-    Extracted framework from 'external_interview' content.
-    Represents a mental model, analytical lens, or decision framework.
-    """
-    __tablename__ = "external_frameworks"
-
-    framework_id = Column(String, primary_key=True, default=gen_id)
-    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
-    framework_name = Column(String, nullable=False)
-    description = Column(Text, nullable=False)
-    guest_name = Column(String, nullable=True)
-    causal_chain = Column(JSON, nullable=True)  # {"if": "X", "then": "Y", "because": "Z"}
-    key_indicators = Column(JSON, default=list)  # data points the guest watches
-    time_horizon = Column(String, nullable=True)  # cyclical, secular, structural
-    thesis_alignment = Column(SAEnum(ThesisAlignment), default=ThesisAlignment.UNRELATED)
-    alignment_notes = Column(Text, nullable=True)
-    reasoning_score = Column(Float, nullable=True)  # 0-1 quality score
-    reasoning_notes = Column(Text, nullable=True)
-    predictions = Column(JSON, default=list)  # list of prediction objects
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    content_item = relationship("ContentItem", back_populates="external_frameworks")
-
-    __table_args__ = (
-        Index("idx_framework_guest", "guest_name"),
-        Index("idx_framework_alignment", "thesis_alignment"),
-    )
-
-
-# DEPRECATED — drop in future migration
-class BlindSpot(Base):
-    """DEPRECATED — part of old convergence architecture. Detected blind spot."""
-    __tablename__ = "blind_spots"
-
-    spot_id = Column(String, primary_key=True, default=gen_id)
-    item_id = Column(String, ForeignKey("content_items.item_id"), nullable=False)
-    topic = Column(String, nullable=False)
-    description = Column(Text, nullable=False)
-    macro_event = Column(Text, nullable=True)  # related event that was occurring
-    event_date = Column(DateTime, nullable=True)
-    severity = Column(String, default="medium")  # low, medium, high
-    source_type = Column(String, nullable=False)  # our_thesis, external, mutual
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    content_item = relationship("ContentItem", back_populates="blind_spots")
-
-    __table_args__ = (
-        Index("idx_blindspot_topic", "topic"),
-        Index("idx_blindspot_severity", "severity"),
-    )
-
-
-# DEPRECATED — drop in future migration
-class ConvergenceRecord(Base):
-    """DEPRECATED — part of old convergence architecture."""
-    __tablename__ = "convergence_records"
-
-    record_id = Column(String, primary_key=True, default=gen_id)
-    thesis_element_id = Column(String, ForeignKey("thesis_elements.element_id"), nullable=False)
-    framework_id = Column(String, ForeignKey("external_frameworks.framework_id"), nullable=False)
-    alignment_type = Column(String, nullable=False)  # agree_diff_reasoning, agree_same, partial, diverge
-    divergence_point = Column(Text, nullable=True)
-    competing_assumptions = Column(JSON, nullable=True)
-    notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-
-# DEPRECATED — drop in future migration
-class WeeklyBriefing(Base):
-    """DEPRECATED — replaced by v3 digest system."""
-    __tablename__ = "weekly_briefings"
-
-    briefing_id = Column(String, primary_key=True, default=gen_id)
-    week_start = Column(DateTime, nullable=False)
-    week_end = Column(DateTime, nullable=False)
-    top_frameworks = Column(JSON, nullable=True)  # ranked list with scores
-    thesis_scorecard = Column(JSON, nullable=True)
-    convergence_summary = Column(JSON, nullable=True)
-    blind_spot_alerts = Column(JSON, nullable=True)
-    narrative_shifts = Column(JSON, nullable=True)
-    file_path_pdf = Column(Text, nullable=True)
-    file_path_docx = Column(Text, nullable=True)
-    items_ingested = Column(Integer, default=0)
-    items_analyzed = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-
-# DEPRECATED — drop in future migration
-class PredictionMarketLink(Base):
-    """DEPRECATED — prediction market integration removed in v3."""
-    __tablename__ = "prediction_market_links"
-
-    link_id = Column(String, primary_key=True, default=gen_id)
-    element_id = Column(String, ForeignKey("thesis_elements.element_id"), nullable=True)
-    framework_id = Column(String, ForeignKey("external_frameworks.framework_id"), nullable=True)
-    platform = Column(String, nullable=False)  # polymarket, kalshi
-    market_id = Column(String, nullable=False)
-    market_slug = Column(String, nullable=True)
-    market_title = Column(Text, nullable=False)
-    market_url = Column(Text, nullable=True)
-    price_at_link = Column(Float, nullable=True)  # probability when we linked it
-    current_price = Column(Float, nullable=True)  # last known probability
-    market_status = Column(String, default="open")  # open, closed, resolved
-    market_result = Column(String, nullable=True)  # yes, no (after resolution)
-    our_side = Column(String, nullable=True)  # yes, no - what we predicted
-    match_confidence = Column(Float, nullable=True)  # 0-1 LLM confidence in match
-    match_rationale = Column(Text, nullable=True)  # why LLM thinks this matches
-    resolved_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
-                        onupdate=lambda: datetime.now(timezone.utc))
-
-    __table_args__ = (
-        Index("idx_market_link_element", "element_id"),
-        Index("idx_market_link_platform", "platform"),
-        Index("idx_market_link_status", "market_status"),
-    )
 
 
 class ResurfacingTrigger(str, enum.Enum):
@@ -446,12 +265,7 @@ class GuestProfile(Base):
     bio = Column(Text, nullable=True)  # short bio/title
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
-    # DEPRECATED — ELO fields, drop in future migration
-    elo_rating = Column(Float, default=1500.0)
-    elo_peak = Column(Float, default=1500.0)
-    elo_floor = Column(Float, default=1500.0)
-    elo_predictions_counted = Column(Integer, default=0)
-    elo_history = Column(JSON, default=list)
+
 
 
 # ─── Database Setup ───

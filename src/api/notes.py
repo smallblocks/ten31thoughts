@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/notes", tags=["notes"])
 class CreateNoteRequest(BaseModel):
     body: str = Field(..., min_length=1, description="Note content (required)")
     title: Optional[str] = Field(None, max_length=500)
-    topic: Optional[str] = Field(None, description="Same vocabulary as ThesisElement.topic")
+    topic: Optional[str] = Field(None, description="Topic tag (fed_policy, bitcoin, labor_market, etc.)")
     tags: list[str] = Field(default_factory=list)
     source_url: Optional[str] = None
     conviction_tier: Optional[str] = Field(None, description="axiom | thesis | observation")
