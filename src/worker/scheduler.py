@@ -80,7 +80,7 @@ def scheduled_resurfacing_job():
 
 def _run_content_analysis(item_id: str):
     """Run v3 content analysis (connection pass + note extraction) on a content item."""
-    from ..db.models import ContentItem, AnalysisStatus
+    from ..db.models import ContentItem, FeedCategory, AnalysisStatus
     from ..db.vector import VectorStore
 
     session = _get_session()
@@ -111,6 +111,22 @@ def _run_content_analysis(item_id: str):
         session.commit()
 
         logger.info(f"Content analysis complete: {item.title[:50]}")
+
+        # Fire news-driven resurfacing for external content
+        feed_category = item.feed.category if item.feed else None
+        if feed_category == FeedCategory.EXTERNAL_INTERVIEW:
+            try:
+                from ..resurfacing.news_driven import fire_news_driven
+                from ..llm.router import LLMRouter
+                llm = LLMRouter()
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(fire_news_driven(session, llm, item_id))
+                finally:
+                    loop.close()
+            except Exception as nde:
+                logger.warning(f"News-driven resurfacing failed for {item_id}: {nde}")
+
     except Exception as e:
         logger.error(f"Content analysis failed for {item_id}: {e}")
         try:
