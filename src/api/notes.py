@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import Session
 
-from ..db.models import Note, gen_id
+from ..db.models import Note, ContentItem, Feed, gen_id
 from ..db.session import get_db
 from ..db.vector import VectorStore
 from ..resurfacing.semantic_on_write import fire_semantic_on_write
@@ -42,6 +42,43 @@ class UpdateNoteRequest(BaseModel):
     tags: Optional[list[str]] = None
     source_url: Optional[str] = None
     conviction_tier: Optional[str] = None
+
+
+class QuickNoteRequest(BaseModel):
+    body: str = Field(..., min_length=1, description="Note content (required)")
+
+
+class QuickNoteResponse(BaseModel):
+    note_id: str
+    body: str
+    created_at: str
+    source: str
+
+
+class EchoNoteMatch(BaseModel):
+    note_id: str
+    title: Optional[str]
+    body_preview: str
+    topic: Optional[str]
+    conviction_tier: Optional[str]
+    similarity: float
+
+
+class EchoContentMatch(BaseModel):
+    item_id: str
+    chunk_preview: str
+    item_title: str
+    feed_name: Optional[str]
+    authors: list[str]
+    published_date: Optional[str]
+    similarity: float
+
+
+class EchoResponse(BaseModel):
+    note_id: str
+    matching_notes: list[EchoNoteMatch]
+    matching_content: list[EchoContentMatch]
+    resurfacing_count: int
 
 
 class NoteResponse(BaseModel):
@@ -112,6 +149,110 @@ def _index_note_lenient(note: Note) -> None:
 
 
 # ─── Endpoints ───
+
+@router.post("/quick", response_model=QuickNoteResponse, status_code=201)
+def quick_capture(
+    request: QuickNoteRequest,
+    session: Session = Depends(get_db),
+):
+    """Fast capture: create a note and return immediately. No ChromaDB, no triggers."""
+    body = request.body.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Body cannot be empty or whitespace only")
+
+    note = Note(
+        note_id=gen_id(),
+        body=body,
+        source="manual",
+        archived=False,
+    )
+    session.add(note)
+    session.commit()
+    session.refresh(note)
+
+    return QuickNoteResponse(
+        note_id=note.note_id,
+        body=note.body,
+        created_at=note.created_at.isoformat(),
+        source="manual",
+    )
+
+
+@router.get("/{note_id}/echo", response_model=EchoResponse)
+def get_note_echo(note_id: str, session: Session = Depends(get_db)):
+    """Archive talks back: index note, fire triggers, return semantic matches."""
+    note = session.get(Note, note_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    # 1. Index in ChromaDB
+    _index_note_lenient(note)
+
+    # 2. Fire semantic-on-write (creates ResurfacingEvent rows)
+    resurfacing_count = fire_semantic_on_write(session, note)
+
+    # 3. Search for matching notes and content
+    matching_notes = []
+    matching_content = []
+    try:
+        vs = VectorStore()
+
+        # Notes search
+        note_results = vs.search_notes(query=note.body, n_results=6)
+        for r in note_results:
+            if r["id"] == note_id:
+                continue  # skip self
+            dist = r.get("distance")
+            similarity = round(1.0 - dist, 4) if dist is not None else 0.0
+            matched_note = session.get(Note, r["id"])
+            if matched_note and not matched_note.archived:
+                matching_notes.append(EchoNoteMatch(
+                    note_id=r["id"],
+                    title=matched_note.title,
+                    body_preview=(matched_note.body or "")[:200],
+                    topic=matched_note.topic,
+                    conviction_tier=matched_note.conviction_tier,
+                    similarity=similarity,
+                ))
+            if len(matching_notes) >= 5:
+                break
+
+        # Content search
+        content_results = vs.search_content(query=note.body, n_results=15)
+        seen_items = set()
+        for r in content_results:
+            item_id = r.get("metadata", {}).get("item_id")
+            if not item_id or item_id in seen_items:
+                continue
+            seen_items.add(item_id)
+            dist = r.get("distance")
+            similarity = round(1.0 - dist, 4) if dist is not None else 0.0
+            item = session.get(ContentItem, item_id)
+            if not item:
+                continue
+            feed = session.get(Feed, item.feed_id) if item.feed_id else None
+            matching_content.append(EchoContentMatch(
+                item_id=item_id,
+                chunk_preview=(r.get("document") or "")[:200],
+                item_title=item.title,
+                feed_name=feed.display_name if feed else None,
+                authors=item.authors or [],
+                published_date=item.published_date.isoformat() if item.published_date else None,
+                similarity=similarity,
+            ))
+            if len(matching_content) >= 5:
+                break
+
+    except Exception as e:
+        logger.warning(f"Echo search failed for note {note_id}: {e}")
+
+    return EchoResponse(
+        note_id=note_id,
+        matching_notes=matching_notes,
+        matching_content=matching_content,
+        resurfacing_count=resurfacing_count,
+    )
+
 
 @router.post("/", response_model=NoteResponse, status_code=201)
 def create_note(
