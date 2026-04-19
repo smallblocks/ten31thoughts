@@ -40,7 +40,7 @@ def start_scheduler():
     """Start the APScheduler background task scheduler."""
     global scheduler
     from apscheduler.schedulers.background import BackgroundScheduler
-    from .worker.scheduler import poll_all_feeds_job, process_analysis_job
+    from .worker.scheduler import poll_all_feeds_job, process_analysis_job, scheduled_resurfacing_job
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -52,8 +52,12 @@ def start_scheduler():
     scheduler.add_job(process_analysis_job, "interval", minutes=1,
                       id="process_connection", max_instances=1, coalesce=True)
 
+    # FSRS scheduled resurfacing daily at 6 AM UTC
+    scheduler.add_job(scheduled_resurfacing_job, "cron", hour=6, minute=0,
+                      id="scheduled_resurfacing", max_instances=1, coalesce=True)
+
     scheduler.start()
-    logger.info("Background scheduler started (poll=5AM, analysis=1min/20items)")
+    logger.info("Background scheduler started (poll=5AM, analysis=1min/20items, resurfacing=6AM)")
 
 
 @asynccontextmanager

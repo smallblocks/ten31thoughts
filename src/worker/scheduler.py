@@ -63,6 +63,21 @@ def process_analysis_job():
         session.close()
 
 
+def scheduled_resurfacing_job():
+    """Fire FSRS scheduled resurfacing for due notes."""
+    from ..resurfacing.scheduled import fire_scheduled
+
+    session = _get_session()
+    try:
+        count = fire_scheduled(session)
+        if count > 0:
+            logger.info(f"Scheduled resurfacing: surfaced {count} notes")
+    except Exception as e:
+        logger.error(f"Scheduled resurfacing failed: {e}")
+    finally:
+        session.close()
+
+
 def _run_content_analysis(item_id: str):
     """Run v3 content analysis (connection pass + note extraction) on a content item."""
     from ..db.models import ContentItem, AnalysisStatus
