@@ -38,6 +38,16 @@ const dict = {
 
   // init/taskConfigureLlm.ts
   'Configure your LLM provider and API key to enable AI features': 29,
+
+  // actions/configureLlm.ts — Whisper fields
+  'Whisper Server URL': 30,
+  'URL of your local Whisper server on DGX Spark (e.g. http://dgx-spark.local:8000). Leave blank to disable voice fallback.': 31,
+  'Whisper Server Type': 32,
+  'Which Whisper server implementation is running on DGX Spark': 33,
+  'faster-whisper-server (OpenAI-compatible)': 34,
+  'whisper.cpp server': 35,
+  'Whisper Model': 36,
+  'Model name for transcription (e.g. whisper-large-v3)': 37,
 } as const
 
 export type I18nKey = keyof typeof dict

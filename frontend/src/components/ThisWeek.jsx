@@ -4,17 +4,38 @@ import { Link } from 'react-router-dom'
 function CaptureBox({ onSave }) {
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [micSupported, setMicSupported] = useState(true)
+  const [micError, setMicError] = useState(null)
   const textareaRef = useRef(null)
+  const recognitionRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const silenceTimerRef = useRef(null)
+  const audioChunksRef = useRef([])
+  const recordingRef = useRef(false) // sync mirror of recording state for callbacks
+  const bodyRef = useRef('') // sync mirror for callbacks that read current body
 
-  async function handleSave() {
-    const text = body.trim()
-    if (!text || saving) return
+  // Feature detection on mount
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    const hasMR = typeof window.MediaRecorder !== 'undefined' && navigator.mediaDevices?.getUserMedia
+    if (!SR && !hasMR) setMicSupported(false)
+  }, [])
+
+  // Keep refs in sync
+  useEffect(() => { bodyRef.current = body }, [body])
+  useEffect(() => { recordingRef.current = recording }, [recording])
+
+  // Shared save function — both typed and voice paths use this
+  async function saveNote(text) {
+    const trimmed = (text || '').trim()
+    if (!trimmed || saving) return
     setSaving(true)
     try {
       const res = await fetch('/api/notes/quick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text }),
+        body: JSON.stringify({ body: trimmed }),
       })
       if (!res.ok) throw new Error('Save failed')
       const note = await res.json()
@@ -30,8 +51,196 @@ function CaptureBox({ onSave }) {
   function handleKeyDown(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
-      handleSave()
+      saveNote(body)
     }
+  }
+
+  // ─── Voice recording ───
+
+  function clearSilenceTimer() {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+  }
+
+  function resetSilenceTimer(onSilence) {
+    clearSilenceTimer()
+    silenceTimerRef.current = setTimeout(onSilence, 1500)
+  }
+
+  function startRecording() {
+    setMicError(null)
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (SR) {
+      startBrowserSR(SR)
+    } else {
+      startWhisperFallback()
+    }
+  }
+
+  function cancelRecording() {
+    clearSilenceTimer()
+    setRecording(false)
+    // Stop browser SR if active
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort() } catch (_) {}
+      recognitionRef.current = null
+    }
+    // Stop MediaRecorder if active
+    if (mediaRecorderRef.current) {
+      try { mediaRecorderRef.current.stop() } catch (_) {}
+      mediaRecorderRef.current = null
+      audioChunksRef.current = []
+    }
+    // Leave textarea content for manual editing
+  }
+
+  // ─── Browser SpeechRecognition path ───
+
+  function startBrowserSR(SR) {
+    const recognition = new SR()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+    recognitionRef.current = recognition
+
+    let finalTranscript = ''
+    let cancelled = false
+
+    recognition.onstart = () => {
+      setRecording(true)
+    }
+
+    recognition.onresult = (event) => {
+      let interim = ''
+      finalTranscript = ''
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript
+        } else {
+          interim += result[0].transcript
+        }
+      }
+      setBody(finalTranscript + interim)
+      resetSilenceTimer(() => {
+        if (recordingRef.current) {
+          try { recognition.stop() } catch (_) {}
+        }
+      })
+    }
+
+    recognition.onerror = (event) => {
+      clearSilenceTimer()
+      if (event.error === 'network' || event.error === 'service-not-allowed') {
+        // Fall through to Whisper
+        recognitionRef.current = null
+        setRecording(false)
+        startWhisperFallback()
+        return
+      }
+      if (event.error === 'not-allowed') {
+        setMicError('Microphone access denied \u2014 enable in browser settings')
+      }
+      cancelled = true
+      setRecording(false)
+      recognitionRef.current = null
+    }
+
+    recognition.onend = () => {
+      clearSilenceTimer()
+      recognitionRef.current = null
+      if (!cancelled && recordingRef.current) {
+        // Ended via silence — save
+        setRecording(false)
+        saveNote(bodyRef.current)
+      }
+    }
+
+    try {
+      recognition.start()
+    } catch (e) {
+      console.error('SR start failed:', e)
+      setMicError('Could not start voice recognition')
+    }
+  }
+
+  // ─── Whisper fallback path ───
+
+  async function startWhisperFallback() {
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      setMicError('Microphone access denied \u2014 enable in browser settings')
+      return
+    }
+
+    setRecording(true)
+    audioChunksRef.current = []
+
+    // Pick supported MIME type
+    const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+    let mimeType = ''
+    for (const mt of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break }
+    }
+
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
+    mediaRecorderRef.current = recorder
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data)
+    }
+
+    recorder.onstop = async () => {
+      // Stop all tracks
+      stream.getTracks().forEach(t => t.stop())
+
+      if (audioChunksRef.current.length === 0) {
+        setRecording(false)
+        mediaRecorderRef.current = null
+        return
+      }
+
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+      audioChunksRef.current = []
+      mediaRecorderRef.current = null
+
+      // Send to Whisper backend
+      setBody('Transcribing\u2026')
+      try {
+        const form = new FormData()
+        form.append('audio', blob, 'recording.' + (recorder.mimeType?.includes('mp4') ? 'mp4' : 'webm'))
+        const res = await fetch('/api/notes/transcribe', { method: 'POST', body: form })
+        if (!res.ok) throw new Error(`Transcribe failed: ${res.status}`)
+        const { transcript } = await res.json()
+        if (transcript?.trim()) {
+          setBody(transcript)
+          setRecording(false)
+          saveNote(transcript)
+        } else {
+          setBody('')
+          setRecording(false)
+        }
+      } catch (e) {
+        console.error('Whisper transcription failed:', e)
+        setBody('')
+        setRecording(false)
+        setMicError('Transcription failed \u2014 check Whisper server config')
+      }
+    }
+
+    recorder.start(250) // collect data every 250ms
+
+    // Escape hatch: 30-second hard max recording length.
+    // RMS-based silence detection deferred as follow-up.
+    silenceTimerRef.current = setTimeout(() => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop()
+      }
+    }, 30000)
   }
 
   // Auto-resize textarea
@@ -56,12 +265,30 @@ function CaptureBox({ onSave }) {
       />
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs text-text-secondary">
-          {body.length > 200 ? `${body.length} chars` : ''}
+          {micError ? (
+            <span className="text-red-400" title={micError}>🎤✕ {micError}</span>
+          ) : (
+            body.length > 200 ? `${body.length} chars` : ''
+          )}
         </span>
         <div className="flex items-center gap-3">
+          {micSupported && (
+            <button
+              type="button"
+              onClick={() => recording ? cancelRecording() : startRecording()}
+              className={`text-sm px-3 py-1.5 rounded transition-colors ${
+                recording
+                  ? 'bg-brand-accent text-white animate-pulse'
+                  : 'bg-brand-accent text-white hover:bg-red-500'
+              }`}
+              aria-label={recording ? 'Stop recording' : 'Start voice dictation'}
+            >
+              {recording ? '● Listening' : '🎤'}
+            </button>
+          )}
           <span className="text-xs text-text-secondary">⌘ Enter</span>
           <button
-            onClick={handleSave}
+            onClick={() => saveNote(body)}
             disabled={!body.trim() || saving}
             className="text-sm px-4 py-1.5 rounded bg-brand-accent text-white hover:bg-red-500 disabled:bg-gray-700 disabled:text-gray-500 transition-colors"
           >

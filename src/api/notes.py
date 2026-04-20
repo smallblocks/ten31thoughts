@@ -5,11 +5,14 @@ Every create, update, archive, and restore writes through to ChromaDB so
 notes remain searchable for the semantic-on-write and news-driven triggers.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+import httpx
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import Session
@@ -149,6 +152,85 @@ def _index_note_lenient(note: Note) -> None:
 
 
 # ─── Endpoints ───
+
+# ─── Whisper config helper ───
+
+STORE_JSON_PATH = Path("/data/store.json")
+
+
+def _get_whisper_config() -> dict:
+    """Read Whisper config from /data/store.json. Returns dict with whisperUrl, whisperApi, whisperModel."""
+    try:
+        data = json.loads(STORE_JSON_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    return {
+        "url": data.get("whisperUrl", ""),
+        "api": data.get("whisperApi", "openai"),
+        "model": data.get("whisperModel", "whisper-large-v3"),
+    }
+
+
+# ─── Transcribe endpoint ───
+
+MAX_AUDIO_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+@router.post("/transcribe")
+async def transcribe_audio(audio: UploadFile = File(...)):
+    # Direct httpx forward to local Whisper. Intentionally NOT routed through
+    # LLMRouter — see v5 spec, "why direct, not via OpenWebUI".
+    # Transcription is latency-sensitive audio-in/text-out with no benefit from
+    # gateway features (auth, model switching, conversation history).
+
+    whisper = _get_whisper_config()
+    whisper_url = whisper.get("url", "").strip()
+    if not whisper_url:
+        raise HTTPException(status_code=503, detail="Whisper not configured")
+
+    # Read and check size
+    audio_bytes = await audio.read()
+    if len(audio_bytes) > MAX_AUDIO_SIZE:
+        raise HTTPException(status_code=413, detail="Audio file exceeds 25MB limit")
+
+    whisper_api = whisper.get("api", "openai")
+    whisper_model = whisper.get("model", "whisper-large-v3")
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if whisper_api == "whisper-cpp":
+                # whisper.cpp server: POST /inference
+                url = f"{whisper_url.rstrip('/')}/inference"
+                files = {"file": (audio.filename or "audio.webm", audio_bytes, audio.content_type or "audio/webm")}
+                data = {"temperature": "0.0", "response_format": "json"}
+                resp = await client.post(url, files=files, data=data)
+            else:
+                # OpenAI-compatible (faster-whisper-server): POST /v1/audio/transcriptions
+                url = f"{whisper_url.rstrip('/')}/v1/audio/transcriptions"
+                files = {"file": (audio.filename or "audio.webm", audio_bytes, audio.content_type or "audio/webm")}
+                data = {"model": whisper_model, "response_format": "json"}
+                resp = await client.post(url, files=files, data=data)
+
+            if resp.status_code != 200:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Transcription failed: upstream returned {resp.status_code}",
+                )
+
+            result = resp.json()
+            transcript = result.get("text", "").strip()
+            return {"transcript": transcript}
+
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=502, detail="Transcription failed: timeout")
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="Transcription failed: could not connect to Whisper server")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Transcription failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {e}")
+
 
 @router.post("/quick", response_model=QuickNoteResponse, status_code=201)
 def quick_capture(

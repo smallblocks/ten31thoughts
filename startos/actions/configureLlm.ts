@@ -71,6 +71,31 @@ const inputSpec = InputSpec.of({
     placeholder: 'text-embedding-3-small',
     masked: false,
   }),
+  whisperUrl: Value.text({
+    name: i18n('Whisper Server URL'),
+    description: i18n('URL of your local Whisper server on DGX Spark (e.g. http://dgx-spark.local:8000). Leave blank to disable voice fallback.'),
+    required: false,
+    default: '',
+    placeholder: 'http://dgx-spark.local:8000',
+    masked: false,
+  }),
+  whisperApi: Value.select({
+    name: i18n('Whisper Server Type'),
+    description: i18n('Which Whisper server implementation is running on DGX Spark'),
+    default: 'openai',
+    values: {
+      openai: i18n('faster-whisper-server (OpenAI-compatible)'),
+      'whisper-cpp': i18n('whisper.cpp server'),
+    },
+  }),
+  whisperModel: Value.text({
+    name: i18n('Whisper Model'),
+    description: i18n('Model name for transcription (e.g. whisper-large-v3)'),
+    required: false,
+    default: 'whisper-large-v3',
+    placeholder: 'whisper-large-v3',
+    masked: false,
+  }),
 })
 
 export const configureLlm = sdk.Action.withInput(
@@ -99,6 +124,9 @@ export const configureLlm = sdk.Action.withInput(
       synthesisModel: store?.synthesisModel ?? 'claude-sonnet-4-20250514',
       chatModel: store?.chatModel ?? 'claude-sonnet-4-20250514',
       embeddingModel: store?.embeddingModel ?? 'text-embedding-3-small',
+      whisperUrl: store?.whisperUrl ?? '',
+      whisperApi: store?.whisperApi ?? 'openai',
+      whisperModel: store?.whisperModel ?? 'whisper-large-v3',
     }
   },
 
@@ -113,6 +141,9 @@ export const configureLlm = sdk.Action.withInput(
       synthesisModel: input.synthesisModel || 'claude-sonnet-4-20250514',
       chatModel: input.chatModel || 'claude-sonnet-4-20250514',
       embeddingModel: input.embeddingModel || 'text-embedding-3-small',
+      whisperUrl: input.whisperUrl || '',
+      whisperApi: input.whisperApi as 'openai' | 'whisper-cpp',
+      whisperModel: input.whisperModel || 'whisper-large-v3',
     })
 
     return {

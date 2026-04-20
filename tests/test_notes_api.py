@@ -1,12 +1,16 @@
 """
 Ten31 Thoughts - Notes API Tests
-Verifies CRUD endpoints, soft-delete semantics, and ChromaDB write-through.
+Verifies CRUD endpoints, soft-delete semantics, ChromaDB write-through,
+and the /transcribe Whisper proxy endpoint.
 
 Run with: pytest tests/test_notes_api.py -v
 """
 
+import json
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch, MagicMock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -328,3 +332,136 @@ class TestChromaWriteThrough:
             assert existing["metadatas"][0]["archived"] is True
         except Exception as e:
             pytest.skip(f"Chroma unavailable in this environment: {e}")
+
+
+# ─── Transcribe endpoint ───
+
+class TestTranscribeEndpoint:
+    """Tests for POST /api/notes/transcribe (Whisper proxy)."""
+
+    def _make_audio_bytes(self, size=1024):
+        return b"\x00" * size
+
+    def test_503_when_whisper_not_configured(self, client, tmp_path, monkeypatch):
+        """Returns 503 when whisperUrl is empty or missing."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({"whisperUrl": ""}))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+        assert r.status_code == 503
+        assert "not configured" in r.json()["detail"]
+
+    def test_503_when_store_missing(self, client, tmp_path, monkeypatch):
+        """Returns 503 when store.json doesn't exist."""
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", tmp_path / "nonexistent.json")
+
+        r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+        assert r.status_code == 503
+
+    def test_413_when_audio_too_large(self, client, tmp_path, monkeypatch):
+        """Returns 413 when audio exceeds 25MB."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({"whisperUrl": "http://localhost:9000"}))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        huge = self._make_audio_bytes(26 * 1024 * 1024)
+        r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", huge, "audio/webm")})
+        assert r.status_code == 413
+        assert "25MB" in r.json()["detail"]
+
+    def test_200_openai_style_backend(self, client, tmp_path, monkeypatch):
+        """Returns transcript from OpenAI-compatible Whisper server."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({
+            "whisperUrl": "http://dgx:8000",
+            "whisperApi": "openai",
+            "whisperModel": "whisper-large-v3",
+        }))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        mock_response = httpx.Response(200, json={"text": "Bitcoin is sound money."})
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("src.api.notes.httpx.AsyncClient", return_value=mock_client):
+            r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+
+        assert r.status_code == 200
+        assert r.json()["transcript"] == "Bitcoin is sound money."
+
+    def test_200_whisper_cpp_backend(self, client, tmp_path, monkeypatch):
+        """Returns transcript from whisper.cpp server."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({
+            "whisperUrl": "http://dgx:8080",
+            "whisperApi": "whisper-cpp",
+            "whisperModel": "whisper-large-v3",
+        }))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        mock_response = httpx.Response(200, json={"text": "Sats flow."})
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("src.api.notes.httpx.AsyncClient", return_value=mock_client):
+            r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+
+        assert r.status_code == 200
+        assert r.json()["transcript"] == "Sats flow."
+
+    def test_502_on_upstream_failure(self, client, tmp_path, monkeypatch):
+        """Returns 502 when Whisper server returns non-200."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({"whisperUrl": "http://dgx:8000"}))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        mock_response = httpx.Response(500, text="Internal Server Error")
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("src.api.notes.httpx.AsyncClient", return_value=mock_client):
+            r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+
+        assert r.status_code == 502
+        assert "upstream returned 500" in r.json()["detail"]
+
+    def test_502_on_timeout(self, client, tmp_path, monkeypatch):
+        """Returns 502 when Whisper server times out."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({"whisperUrl": "http://dgx:8000"}))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timed out"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("src.api.notes.httpx.AsyncClient", return_value=mock_client):
+            r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+
+        assert r.status_code == 502
+        assert "timeout" in r.json()["detail"]
+
+    def test_502_on_connection_error(self, client, tmp_path, monkeypatch):
+        """Returns 502 when Whisper server is unreachable."""
+        store = tmp_path / "store.json"
+        store.write_text(json.dumps({"whisperUrl": "http://dgx:8000"}))
+        monkeypatch.setattr("src.api.notes.STORE_JSON_PATH", store)
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("src.api.notes.httpx.AsyncClient", return_value=mock_client):
+            r = client.post("/api/notes/transcribe", files={"audio": ("audio.webm", self._make_audio_bytes(), "audio/webm")})
+
+        assert r.status_code == 502
+        assert "could not connect" in r.json()["detail"]

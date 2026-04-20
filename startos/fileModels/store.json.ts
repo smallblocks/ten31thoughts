@@ -10,6 +10,9 @@ const shape = z.object({
   synthesisModel: z.string().catch('claude-sonnet-4-20250514'),
   chatModel: z.string().catch('claude-sonnet-4-20250514'),
   embeddingModel: z.string().catch('text-embedding-3-small'),
+  whisperUrl: z.string().catch(''),
+  whisperApi: z.enum(['openai', 'whisper-cpp']).catch('openai'),
+  whisperModel: z.string().catch('whisper-large-v3'),
 })
 
 export const storeJson = FileHelper.json(

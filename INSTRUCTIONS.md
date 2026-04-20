@@ -66,6 +66,37 @@ Ask the intelligence layer anything:
 - "How has my view on the Fed evolved?"
 - "Who predicted the payroll revision correctly?"
 
+## Voice Capture
+
+The CaptureBox on the This Week page includes a microphone button for voice-to-text note capture.
+
+### Browser Dictation (default)
+
+On supported browsers (Chrome, Edge, Safari 17+), tapping the mic button uses the browser's built-in `SpeechRecognition` API for on-device transcription. No server calls are made — it's free, fast, and works offline.
+
+- Tap 🎤 to start, speak naturally, and stop talking for ~1.5 seconds to auto-save.
+- Tap "● Listening" to cancel without saving (partial transcript stays in the textarea for manual editing).
+- Live interim transcripts stream into the textarea as you speak.
+
+### Whisper Fallback
+
+If your browser doesn't support SpeechRecognition (e.g., Firefox, or iOS Safari over plain HTTP), the app falls back to recording audio and sending it to a local Whisper-compatible server for transcription.
+
+**Recommended server:** [faster-whisper-server](https://github.com/fedirz/faster-whisper-server) running on your DGX Spark or any local GPU.
+
+To configure:
+
+1. In StartOS, go to **Ten31 Thoughts → Actions → Configure LLM**.
+2. Set **Whisper Server URL** to your server (e.g., `http://192.168.86.28:8000`).
+3. Set **Whisper Server Type** to match your server (`faster-whisper-server` or `whisper.cpp`).
+4. Set **Whisper Model** (e.g., `whisper-large-v3`).
+
+If no Whisper URL is configured and the browser doesn't support SpeechRecognition, the mic button will not appear.
+
+### iOS Safari Note
+
+iOS Safari requires HTTPS for the `SpeechRecognition` API. If you access Ten31 Thoughts over plain HTTP on a `.local` address, browser dictation won't work — but the Whisper fallback will handle it automatically (as long as a Whisper server is configured). For full browser dictation support on iOS, access the service through an HTTPS gateway (e.g., StartTunnel).
+
 ## Data & Privacy
 
-All data is stored locally on your StartOS device. No data leaves your server except for LLM API calls (which send content to your configured provider for analysis). Consider using a local Ollama model for maximum privacy.
+All data is stored locally on your StartOS device. No data leaves your server except for LLM API calls (which send content to your configured provider for analysis). Voice transcription via browser SpeechRecognition stays entirely on-device. The Whisper fallback sends audio only to your configured local server — never to an external service. Consider using a local Ollama model for maximum privacy.
