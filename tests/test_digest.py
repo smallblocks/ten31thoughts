@@ -250,10 +250,13 @@ class TestGatherWritten:
         start = now - timedelta(days=7)
         result = generator._gather_written(start, now)
 
-        # manual note should be included; timestamp note excluded
-        manual_notes = result["manual_notes"]
-        assert len(manual_notes) == 1
-        assert manual_notes[0]["title"] == "My manual note"
+        # manual note should appear in your_notes
+        assert len(result["your_notes"]) == 1
+        assert result["your_notes"][0]["title"] == "My manual note"
+
+        # timestamp note should be routed to timestamp_synopsis
+        assert len(result["timestamp_synopsis"]) == 1
+        assert result["timestamp_synopsis"][0]["title"] == "Auto-extracted note"
 
 
 class TestGenerateHTML:
