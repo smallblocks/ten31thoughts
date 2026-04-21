@@ -48,8 +48,8 @@ def start_scheduler():
     scheduler.add_job(poll_all_feeds_job, "cron", hour=5, minute=0,
                       id="poll_feeds", max_instances=1, coalesce=True)
 
-    # v3: Connection-first analysis every minute (20 items per batch)
-    scheduler.add_job(process_analysis_job, "interval", minutes=1,
+    # v3: Connection-first analysis every 15 minutes (20 items per batch)
+    scheduler.add_job(process_analysis_job, "interval", minutes=15,
                       id="process_connection", max_instances=1, coalesce=True)
 
     # FSRS scheduled resurfacing daily at 6 AM UTC
@@ -57,7 +57,7 @@ def start_scheduler():
                       id="scheduled_resurfacing", max_instances=1, coalesce=True)
 
     scheduler.start()
-    logger.info("Background scheduler started (poll=5AM, analysis=1min/20items, resurfacing=6AM)")
+    logger.info("Background scheduler started (poll=5AM, analysis=15min/20items, resurfacing=6AM)")
 
 
 @asynccontextmanager
