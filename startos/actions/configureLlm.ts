@@ -132,7 +132,9 @@ export const configureLlm = sdk.Action.withInput(
 
   // Save handler
   async ({ effects, input }) => {
+    const existing = await storeJson.read((s) => s).once()
     await storeJson.write(effects, {
+      pinHash: (existing as any)?.pinHash ?? '',
       provider: input.provider as 'anthropic' | 'openai' | 'ollama',
       anthropicApiKey: input.anthropicApiKey || '',
       openaiApiKey: input.openaiApiKey || '',

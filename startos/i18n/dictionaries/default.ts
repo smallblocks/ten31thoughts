@@ -48,6 +48,16 @@ const dict = {
   'whisper.cpp server': 35,
   'Whisper Model': 36,
   'Model name for transcription (e.g. whisper-large-v3)': 37,
+
+  // actions/setPin.ts
+  'PIN': 38,
+  'Set a numeric PIN to protect the web interface. Leave blank to remove the PIN and disable auth.': 39,
+  'Set PIN': 40,
+  'Set or clear the PIN for web interface authentication. Auth is dormant until a PIN is set.': 41,
+  'PIN Set': 42,
+  'PIN has been set. The web interface now requires authentication. Existing sessions have been invalidated — you will need to log in again.': 43,
+  'PIN Cleared': 44,
+  'PIN has been removed. The web interface is now open (no authentication required).': 45,
 } as const
 
 export type I18nKey = keyof typeof dict

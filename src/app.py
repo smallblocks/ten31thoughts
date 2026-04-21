@@ -4,15 +4,23 @@ FastAPI application with feed management, chat, and analysis endpoints.
 Uses APScheduler for background tasks (StartOS requires single container).
 """
 
+import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .db.session import init_db, get_db
+from .api.auth import (
+    router as auth_router,
+    auth_enabled,
+    validate_session,
+    SESSION_COOKIE,
+    PUBLIC_PATHS,
+)
 from .api.feeds import router as feeds_router
 from .api.notes import router as notes_router
 from .api.analysis import router as analysis_router
@@ -92,6 +100,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(feeds_router)
 app.include_router(notes_router)
 app.include_router(analysis_router)
@@ -119,6 +128,32 @@ def system_status(session: Session = Depends(get_db)):
     manager = FeedManager(session)
     stats = manager.get_content_stats()
     return {"status": "healthy", "version": "3.0.0", "content": stats}
+
+
+# ─── Auth middleware ────────────────────────────────────────────────────────
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Protect /api/ routes when auth is enabled.
+    StartOS actions call directly (client is None) — always bypass.
+    Internal/localhost requests bypass via X-Real-IP check.
+    """
+    path = request.url.path
+    if path.startswith("/api/") and path not in PUBLIC_PATHS:
+        # StartOS action calls have no client
+        if request.client is None:
+            return await call_next(request)
+        # Check if request is internal (behind nginx)
+        real_ip = request.headers.get("x-real-ip", request.client.host)
+        is_internal = real_ip in ("127.0.0.1", "::1")
+        if not is_internal and auth_enabled():
+            token = request.cookies.get(SESSION_COOKIE)
+            if not validate_session(token):
+                return Response(
+                    content=json.dumps({"detail": "Not authenticated"}),
+                    status_code=401,
+                    media_type="application/json",
+                )
+    return await call_next(request)
 
 
 # Serve the React frontend — MUST be last (catches all unmatched routes)

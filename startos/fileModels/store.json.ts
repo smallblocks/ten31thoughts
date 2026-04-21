@@ -13,6 +13,7 @@ const shape = z.object({
   whisperUrl: z.string().catch(''),
   whisperApi: z.enum(['openai', 'whisper-cpp']).catch('openai'),
   whisperModel: z.string().catch('whisper-large-v3'),
+  pinHash: z.string().catch(''),
 })
 
 export const storeJson = FileHelper.json(

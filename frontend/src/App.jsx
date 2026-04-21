@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import Login from './components/Login'
 import ThisWeek from './components/ThisWeek'
 import Notes from './components/Notes'
 import NoteDetail from './components/NoteDetail'
@@ -60,6 +61,29 @@ function Header() {
 }
 
 export default function App() {
+  const [authChecked, setAuthChecked] = useState(false)
+  const [needsLogin, setNeedsLogin] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/auth/status', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.authEnabled && !data.authenticated) {
+          setNeedsLogin(true)
+        }
+        setAuthChecked(true)
+      })
+      .catch(() => setAuthChecked(true))
+  }, [])
+
+  if (!authChecked) {
+    return <div className="min-h-screen" style={{ background: '#0a0a0c' }} />
+  }
+
+  if (needsLogin) {
+    return <Login onLogin={() => setNeedsLogin(false)} />
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
