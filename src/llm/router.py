@@ -90,9 +90,12 @@ class LLMRouter:
         store = self._load_store()
 
         # Prefer store.json, fallback to env vars
+        provider = store.get("provider", "anthropic")
         anthropic_key = store.get("anthropicApiKey") or os.getenv("ANTHROPIC_API_KEY")
         openai_key = store.get("openaiApiKey") or os.getenv("OPENAI_API_KEY")
+        openai_base = store.get("openaiBaseUrl") or os.getenv("OPENAI_BASE_URL", "")
         ollama_base = store.get("ollamaBaseUrl") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        vllm_base = store.get("vllmBaseUrl") or os.getenv("VLLM_BASE_URL", "")
 
         # Model overrides from store
         model_overrides = {
@@ -110,14 +113,28 @@ class LLMRouter:
 
             config = LLMConfig(model=model)
 
-            # Auto-detect provider from model name and set keys
-            if "claude" in model or "anthropic" in model:
-                config.api_key = anthropic_key
-            elif "gpt" in model or "o1" in model or "text-embedding" in model:
-                config.api_key = openai_key
-            elif "ollama" in model or model.startswith("ollama/"):
+            # Route based on selected provider first, then auto-detect from model name
+            if provider == "vllm":
+                # vLLM is OpenAI-compatible — use openai/ prefix for LiteLLM
+                if not model.startswith("openai/"):
+                    config.model = f"openai/{model}"
+                config.api_base = vllm_base
+                config.api_key = "vllm"  # LiteLLM needs a non-empty key
+            elif provider == "ollama" or "ollama" in model or model.startswith("ollama/"):
                 config.api_base = ollama_base
                 config.api_key = "ollama"  # LiteLLM needs a non-empty key
+            elif provider == "openai" or "gpt" in model or "o1" in model or "text-embedding" in model:
+                config.api_key = openai_key
+                if openai_base:
+                    config.api_base = openai_base
+            elif provider == "anthropic" or "claude" in model or "anthropic" in model:
+                config.api_key = anthropic_key
+            else:
+                # Unknown — try to auto-detect from model name
+                if "claude" in model or "anthropic" in model:
+                    config.api_key = anthropic_key
+                elif "gpt" in model or "o1" in model or "text-embedding" in model:
+                    config.api_key = openai_key
 
             configs[task] = config
 

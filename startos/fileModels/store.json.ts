@@ -2,10 +2,12 @@ import { FileHelper, z } from '@start9labs/start-sdk'
 import { sdk } from '../sdk'
 
 const shape = z.object({
-  provider: z.enum(['anthropic', 'openai', 'ollama']).catch('anthropic'),
+  provider: z.enum(['anthropic', 'openai', 'ollama', 'vllm']).catch('anthropic'),
   anthropicApiKey: z.string().catch(''),
   openaiApiKey: z.string().catch(''),
+  openaiBaseUrl: z.string().catch(''),
   ollamaBaseUrl: z.string().catch('http://localhost:11434'),
+  vllmBaseUrl: z.string().catch(''),
   analysisModel: z.string().catch('claude-sonnet-4-20250514'),
   synthesisModel: z.string().catch('claude-sonnet-4-20250514'),
   chatModel: z.string().catch('claude-sonnet-4-20250514'),
