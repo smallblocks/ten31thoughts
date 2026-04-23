@@ -87,11 +87,14 @@ function CaptureBox({ onSave }) {
     }
   }
 
+  const stoppingRef = useRef(false) // true when user pressed Stop
+
   function stopRecording() {
+    stoppingRef.current = true
     // Gracefully stop — keeps text in textarea for review
     if (recognitionRef.current) {
       try { recognitionRef.current.stop() } catch (_) {}
-      // onend handler will set recording=false
+      // onend handler will set recording=false because stoppingRef is true
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop()
@@ -100,6 +103,7 @@ function CaptureBox({ onSave }) {
   }
 
   function cancelRecording() {
+    stoppingRef.current = true
     setRecording(false)
     if (recognitionRef.current) {
       try { recognitionRef.current.abort() } catch (_) {}
@@ -118,65 +122,98 @@ function CaptureBox({ onSave }) {
 
   // ─── Browser SpeechRecognition path ───
 
+  // Accumulated transcript persists across browser SR restarts
+  const accumulatedRef = useRef('')
+
   function startBrowserSR(SR) {
-    const recognition = new SR()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
-    recognitionRef.current = recognition
+    stoppingRef.current = false
+    accumulatedRef.current = bodyRef.current // preserve any existing text
 
-    let finalTranscript = ''
-    let aborted = false
+    function launchRecognition() {
+      const recognition = new SR()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = 'en-US'
+      recognitionRef.current = recognition
 
-    recognition.onstart = () => {
-      setRecording(true)
-    }
+      let sessionFinal = '' // final transcript within this SR session
+      let fatalError = false
 
-    recognition.onresult = (event) => {
-      let interim = ''
-      finalTranscript = ''
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i]
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript
-        } else {
-          interim += result[0].transcript
+      recognition.onstart = () => {
+        setRecording(true)
+      }
+
+      recognition.onresult = (event) => {
+        let interim = ''
+        sessionFinal = ''
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i]
+          if (result.isFinal) {
+            sessionFinal += result[0].transcript
+          } else {
+            interim += result[0].transcript
+          }
+        }
+        // Show accumulated + current session text
+        const accumulated = accumulatedRef.current
+        const separator = accumulated && (sessionFinal || interim) ? ' ' : ''
+        setBody(accumulated + separator + sessionFinal + interim)
+      }
+
+      recognition.onerror = (event) => {
+        if (event.error === 'network' || event.error === 'service-not-allowed') {
+          recognitionRef.current = null
+          setRecording(false)
+          startWhisperFallback()
+          fatalError = true
+          return
+        }
+        if (event.error === 'not-allowed') {
+          setMicError('Microphone access denied \u2014 enable in browser settings')
+          fatalError = true
+        }
+        if (event.error === 'aborted') {
+          // User cancelled — don't restart
+          fatalError = true
+        }
+        if (event.error === 'no-speech') {
+          // Silence timeout from browser — not fatal, let onend restart
+          return
         }
       }
-      setBody(finalTranscript + interim)
-      // No silence timer — user controls when to stop
-    }
 
-    recognition.onerror = (event) => {
-      if (event.error === 'network' || event.error === 'service-not-allowed') {
+      recognition.onend = () => {
+        // Commit this session's final transcript to accumulated
+        if (sessionFinal) {
+          const sep = accumulatedRef.current ? ' ' : ''
+          accumulatedRef.current += sep + sessionFinal
+        }
         recognitionRef.current = null
-        setRecording(false)
-        startWhisperFallback()
-        return
+
+        // If user pressed Stop or fatal error, we're done
+        if (stoppingRef.current || fatalError) {
+          setRecording(false)
+          return
+        }
+
+        // Browser killed the session (silence timeout) — auto-restart
+        try {
+          launchRecognition()
+        } catch (e) {
+          console.error('SR restart failed:', e)
+          setRecording(false)
+        }
       }
-      if (event.error === 'not-allowed') {
-        setMicError('Microphone access denied \u2014 enable in browser settings')
+
+      try {
+        recognition.start()
+      } catch (e) {
+        console.error('SR start failed:', e)
+        setMicError('Could not start voice recognition')
       }
-      aborted = true
-      setRecording(false)
-      recognitionRef.current = null
     }
 
-    recognition.onend = () => {
-      recognitionRef.current = null
-      if (!aborted) {
-        // Just stop recording — leave text in textarea for review
-        // User will press Save when ready
-        setRecording(false)
-      }
-    }
-
-    try {
-      recognition.start()
-    } catch (e) {
-      console.error('SR start failed:', e)
-      setMicError('Could not start voice recognition')
-    }
+    launchRecognition()
   }
 
   // ─── Whisper fallback path ───
