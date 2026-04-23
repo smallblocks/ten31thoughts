@@ -173,7 +173,7 @@ def _get_whisper_config() -> dict:
 
 # ─── Transcribe endpoint ───
 
-MAX_AUDIO_SIZE = 25 * 1024 * 1024  # 25 MB
+MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100 MB — supports 10+ min voice captures
 
 
 @router.post("/transcribe")
@@ -197,7 +197,7 @@ async def transcribe_audio(audio: UploadFile = File(...)):
     whisper_model = whisper.get("model", "whisper-large-v3")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:  # 5 min timeout for long recordings
             if whisper_api == "whisper-cpp":
                 # whisper.cpp server: POST /inference
                 url = f"{whisper_url.rstrip('/')}/inference"
