@@ -1,11 +1,16 @@
 """
 Ten31 Thoughts - Vector Store
 ChromaDB integration for semantic search over content, notes, and connections.
+
+Embeddings are routed through the configured LLM provider (see embedding_fn.py)
+rather than ChromaDB's built-in default.
 """
 
 import logging
 import os
 from typing import Optional
+
+from .embedding_fn import ConfiguredEmbeddingFunction, ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -43,18 +48,33 @@ class VectorStore:
         self._init_collections()
 
     def _init_collections(self):
-        """Initialize or get all collections."""
+        """Initialize or get all collections with the configured embedding function."""
+        try:
+            self._embedding_fn = ConfiguredEmbeddingFunction()
+        except ConfigurationError:
+            logger.warning(
+                "Embedding provider not configured — collections will use "
+                "ChromaDB defaults.  Set an embedding-capable provider "
+                "(vllm/ollama/openai) to route embeddings to the Spark."
+            )
+            self._embedding_fn = None
+
+        cosine_meta = {"hnsw:space": "cosine"}
+
         self.content_chunks = self.client.get_or_create_collection(
             name="content_chunks",
-            metadata={"description": "Raw content text chunks for RAG retrieval"}
+            metadata=cosine_meta,
+            embedding_function=self._embedding_fn,
         )
         self.notes = self.client.get_or_create_collection(
             name="notes",
-            metadata={"description": "Personal notes for the resurfacing engine"}
+            metadata=cosine_meta,
+            embedding_function=self._embedding_fn,
         )
         self.connections = self.client.get_or_create_collection(
             name="connections",
-            metadata={"hnsw:space": "cosine"},
+            metadata=cosine_meta,
+            embedding_function=self._embedding_fn,
         )
 
     # ─── Notes ───
