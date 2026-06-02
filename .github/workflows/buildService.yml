@@ -51,7 +51,7 @@ jobs:
           toolchain: stable
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -108,10 +108,4 @@ jobs:
           name: build-output
           path: ./*.s9pk
           compression-level: 0
-          retention-days: 1
-
-  UploadArtifacts:
-    needs: build
-    uses: start9labs/shared-workflows/.github/workflows/uploadArtifacts.yml@master
-    with:
-      s9pk_matrix: ${{ needs.build.outputs.s9pk_matrix }}
+          retention-days: 14
