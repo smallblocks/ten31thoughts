@@ -13,9 +13,10 @@ RUN npm run build
 # ─── Stage 2: Application ───
 FROM python:3.12-slim
 
-# System dependencies (includes WeasyPrint requirements)
+# System dependencies (includes WeasyPrint requirements + ffmpeg for audio chunking)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ffmpeg \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libgdk-pixbuf-2.0-0 \

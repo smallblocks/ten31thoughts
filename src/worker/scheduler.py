@@ -78,6 +78,45 @@ def scheduled_resurfacing_job():
         session.close()
 
 
+def transcribe_audio_job():
+    """Transcribe audio items that need transcription."""
+    from ..feeds.transcriber import PodcastTranscriber
+
+    session = _get_session()
+    try:
+        transcriber = PodcastTranscriber(session)
+        
+        if not transcriber.can_transcribe():
+            logger.debug("Whisper not configured, skipping transcription job")
+            return
+
+        items = transcriber.get_transcribable_items(limit=3)  # Limit to 3 per run - transcription is slow
+        
+        if not items:
+            return
+
+        logger.info(f"Transcribing {len(items)} audio items")
+        
+        for item in items:
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    success = loop.run_until_complete(transcriber.transcribe(item))
+                    if success:
+                        logger.info(f"Successfully transcribed: {item.title}")
+                    else:
+                        logger.warning(f"Transcription failed for: {item.title}")
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"Transcription error for {item.item_id}: {e}")
+                
+    except Exception as e:
+        logger.error(f"Transcription job failed: {e}")
+    finally:
+        session.close()
+
+
 def _run_content_analysis(item_id: str):
     """Run v3 content analysis (connection pass + note extraction) on a content item."""
     from ..db.models import ContentItem, FeedCategory, AnalysisStatus
@@ -87,6 +126,11 @@ def _run_content_analysis(item_id: str):
     try:
         item = session.get(ContentItem, item_id)
         if not item:
+            return
+
+        # Skip audio items with no or minimal content_text - they need transcription first
+        if item.content_type == "audio" and (not item.content_text or len(item.content_text.strip()) < 200):
+            logger.debug(f"Skipping analysis for audio item {item_id} - needs transcription first")
             return
 
         # Index content in vector store

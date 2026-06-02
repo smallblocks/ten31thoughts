@@ -3,6 +3,7 @@ Ten31 Thoughts - Feed Management API
 REST endpoints for managing RSS feeds and viewing content.
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +16,8 @@ from ..db.models import (
 )
 from ..db.session import get_db
 from ..feeds.manager import FeedManager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/feeds", tags=["feeds"])
 
@@ -272,3 +275,86 @@ def trigger_feed_poll(
         our_thesis_items=len(new_items) if category == FeedCategory.OUR_THESIS else 0,
         external_items=len(new_items) if category == FeedCategory.EXTERNAL_INTERVIEW else 0,
     )
+
+
+@router.post("/{feed_id}/transcribe")
+async def trigger_feed_transcription(
+    feed_id: str,
+    session: Session = Depends(get_db),
+):
+    """Manually trigger transcription of all audio items in a specific feed."""
+    from ..feeds.transcriber import PodcastTranscriber
+    
+    # Verify feed exists
+    feed = session.get(Feed, feed_id)
+    if not feed:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    
+    transcriber = PodcastTranscriber(session)
+    
+    if not transcriber.can_transcribe():
+        raise HTTPException(status_code=503, detail="Whisper not configured")
+    
+    # Get all audio items for this feed that need transcription
+    from sqlalchemy import and_, func, or_
+    audio_items = session.query(ContentItem).filter(
+        and_(
+            ContentItem.feed_id == feed_id,
+            ContentItem.content_type == "audio",
+            or_(
+                ContentItem.content_text.is_(None),
+                ContentItem.content_text == "",
+                func.length(ContentItem.content_text) < 200
+            ),
+            ContentItem.analysis_status == AnalysisStatus.PENDING
+        )
+    ).all()
+    
+    if not audio_items:
+        return {"message": "No audio items need transcription", "transcribed": 0}
+    
+    transcribed_count = 0
+    for item in audio_items:
+        try:
+            success = await transcriber.transcribe(item)
+            if success:
+                transcribed_count += 1
+        except Exception as e:
+            logger.error(f"Transcription failed for {item.item_id}: {e}")
+    
+    return {
+        "message": f"Transcription complete for {feed.display_name}",
+        "total_items": len(audio_items),
+        "transcribed": transcribed_count
+    }
+
+
+@router.post("/transcribe")
+async def trigger_all_transcription(session: Session = Depends(get_db)):
+    """Manually trigger transcription of all pending audio items."""
+    from ..feeds.transcriber import PodcastTranscriber
+    
+    transcriber = PodcastTranscriber(session)
+    
+    if not transcriber.can_transcribe():
+        raise HTTPException(status_code=503, detail="Whisper not configured")
+    
+    audio_items = transcriber.get_transcribable_items(limit=10)  # Limit for manual trigger
+    
+    if not audio_items:
+        return {"message": "No audio items need transcription", "transcribed": 0}
+    
+    transcribed_count = 0
+    for item in audio_items:
+        try:
+            success = await transcriber.transcribe(item)
+            if success:
+                transcribed_count += 1
+        except Exception as e:
+            logger.error(f"Transcription failed for {item.item_id}: {e}")
+    
+    return {
+        "message": "Transcription complete",
+        "total_items": len(audio_items),
+        "transcribed": transcribed_count
+    }

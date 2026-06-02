@@ -48,13 +48,17 @@ def start_scheduler():
     """Start the APScheduler background task scheduler."""
     global scheduler
     from apscheduler.schedulers.background import BackgroundScheduler
-    from .worker.scheduler import poll_all_feeds_job, process_analysis_job, scheduled_resurfacing_job
+    from .worker.scheduler import poll_all_feeds_job, process_analysis_job, scheduled_resurfacing_job, transcribe_audio_job
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
     # Poll feeds daily at 5 AM UTC
     scheduler.add_job(poll_all_feeds_job, "cron", hour=5, minute=0,
                       id="poll_feeds", max_instances=1, coalesce=True)
+
+    # Transcribe audio items every 15 minutes (offset from analysis)
+    scheduler.add_job(transcribe_audio_job, "interval", minutes=15, start_date="2000-01-01 00:07:30",
+                      id="transcribe_audio", max_instances=1, coalesce=True)
 
     # v3: Connection-first analysis every 15 minutes (20 items per batch)
     scheduler.add_job(process_analysis_job, "interval", minutes=15,
@@ -65,7 +69,7 @@ def start_scheduler():
                       id="scheduled_resurfacing", max_instances=1, coalesce=True)
 
     scheduler.start()
-    logger.info("Background scheduler started (poll=5AM, analysis=15min/20items, resurfacing=6AM)")
+    logger.info("Background scheduler started (poll=5AM, transcription=15min/3items, analysis=15min/20items, resurfacing=6AM)")
 
 
 @asynccontextmanager
