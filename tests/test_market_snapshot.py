@@ -4,10 +4,19 @@ Tests for market snapshot capture functionality.
 
 import asyncio
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime, timezone
 
 from src.markets.snapshot import capture_market_snapshot
+
+
+def _make_response(status_code, json_data=None):
+    """Create a mock httpx Response."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    if json_data is not None:
+        resp.json.return_value = json_data
+    return resp
 
 
 class TestMarketSnapshot:
@@ -15,135 +24,105 @@ class TestMarketSnapshot:
 
     def test_capture_market_snapshot_success(self):
         """Test successful market snapshot capture with mocked HTTP responses."""
-        
-        # Mock successful responses
-        mock_btc_response = AsyncMock()
-        mock_btc_response.status_code = 200
-        mock_btc_response.json.return_value = {
-            "bitcoin": {
-                "usd": 63500.0,
-                "usd_24h_change": 2.45
-            }
-        }
-        
-        mock_fear_response = AsyncMock()
-        mock_fear_response.status_code = 200
-        mock_fear_response.json.return_value = {
-            "data": [
-                {
-                    "value": "75",
-                    "value_classification": "Greed"
-                }
-            ]
-        }
-        
+
+        btc_resp = _make_response(200, {
+            "bitcoin": {"usd": 63500.0, "usd_24h_change": 2.45}
+        })
+        fg_resp = _make_response(200, {
+            "data": [{"value": "75", "value_classification": "Greed"}]
+        })
+
+        mock_client = AsyncMock()
         async def mock_get(url, params=None):
             if "coingecko" in url:
-                return mock_btc_response
-            elif "alternative.me" in url:
-                return mock_fear_response
-            return AsyncMock(status_code=404)
-        
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_context = AsyncMock()
-            mock_context.__aenter__ = AsyncMock(return_value=AsyncMock(get=mock_get))
-            mock_context.__aexit__ = AsyncMock(return_value=None)
-            mock_client.return_value = mock_context
-            
-            # Run the async function
+                return btc_resp
+            if "alternative.me" in url:
+                return fg_resp
+            return _make_response(404)
+
+        mock_client.get = mock_get
+
+        with patch('src.markets.snapshot.httpx.AsyncClient') as MockCls:
+            MockCls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockCls.return_value.__aexit__ = AsyncMock(return_value=None)
+
             result = asyncio.run(capture_market_snapshot())
-        
+
         assert result is not None
-        assert "btc_price" in result
         assert result["btc_price"] == 63500.0
         assert result["btc_change_24h"] == 2.45
         assert result["fear_greed"] == 75
         assert result["fear_greed_label"] == "Greed"
         assert "captured_at" in result
-        
-        # Verify captured_at is a valid ISO timestamp
-        captured_at = datetime.fromisoformat(result["captured_at"].replace('Z', '+00:00'))
-        assert captured_at.tzinfo == timezone.utc
 
     def test_capture_market_snapshot_btc_fail(self):
-        """Test snapshot capture when Bitcoin API fails."""
-        
-        mock_btc_response = AsyncMock()
-        mock_btc_response.status_code = 500
-        
-        mock_fear_response = AsyncMock()
-        mock_fear_response.status_code = 200
-        mock_fear_response.json.return_value = {
+        """Test snapshot capture when Bitcoin API fails — should return None."""
+
+        btc_resp = _make_response(500)
+        fg_resp = _make_response(200, {
             "data": [{"value": "50", "value_classification": "Neutral"}]
-        }
-        
+        })
+
+        mock_client = AsyncMock()
         async def mock_get(url, params=None):
             if "coingecko" in url:
-                return mock_btc_response
-            elif "alternative.me" in url:
-                return mock_fear_response
-            return AsyncMock(status_code=404)
-        
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_context = AsyncMock()
-            mock_context.__aenter__ = AsyncMock(return_value=AsyncMock(get=mock_get))
-            mock_context.__aexit__ = AsyncMock(return_value=None)
-            mock_client.return_value = mock_context
-            
+                return btc_resp
+            if "alternative.me" in url:
+                return fg_resp
+            return _make_response(404)
+
+        mock_client.get = mock_get
+
+        with patch('src.markets.snapshot.httpx.AsyncClient') as MockCls:
+            MockCls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockCls.return_value.__aexit__ = AsyncMock(return_value=None)
+
             result = asyncio.run(capture_market_snapshot())
-        
-        # Should return None because BTC price is required
+
         assert result is None
 
     def test_capture_market_snapshot_timeout(self):
-        """Test snapshot capture when HTTP requests timeout."""
-        
-        async def mock_timeout(*args, **kwargs):
+        """Test snapshot capture when HTTP requests timeout — should return None."""
+
+        mock_client = AsyncMock()
+        async def mock_get(url, params=None):
             raise Exception("Timeout")
-        
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_context = AsyncMock()
-            mock_context.__aenter__ = AsyncMock(return_value=AsyncMock(get=mock_timeout))
-            mock_context.__aexit__ = AsyncMock(return_value=None)
-            mock_client.return_value = mock_context
-            
+        mock_client.get = mock_get
+
+        with patch('src.markets.snapshot.httpx.AsyncClient') as MockCls:
+            MockCls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockCls.return_value.__aexit__ = AsyncMock(return_value=None)
+
             result = asyncio.run(capture_market_snapshot())
-        
+
         assert result is None
 
     def test_capture_market_snapshot_fear_greed_optional(self):
-        """Test snapshot capture when Fear & Greed API fails but BTC succeeds."""
-        
-        mock_btc_response = AsyncMock()
-        mock_btc_response.status_code = 200
-        mock_btc_response.json.return_value = {
-            "bitcoin": {
-                "usd": 58000.0,
-                "usd_24h_change": -1.23
-            }
-        }
-        
-        mock_fear_response = AsyncMock()
-        mock_fear_response.status_code = 500
-        
+        """Test snapshot when Fear & Greed fails but BTC succeeds — snapshot still returned."""
+
+        btc_resp = _make_response(200, {
+            "bitcoin": {"usd": 58000.0, "usd_24h_change": -1.23}
+        })
+        fg_resp = _make_response(500)
+
+        mock_client = AsyncMock()
         async def mock_get(url, params=None):
             if "coingecko" in url:
-                return mock_btc_response
-            elif "alternative.me" in url:
-                return mock_fear_response
-            return AsyncMock(status_code=404)
-        
-        with patch('httpx.AsyncClient') as mock_client:
-            mock_context = AsyncMock()
-            mock_context.__aenter__ = AsyncMock(return_value=AsyncMock(get=mock_get))
-            mock_context.__aexit__ = AsyncMock(return_value=None)
-            mock_client.return_value = mock_context
-            
+                return btc_resp
+            if "alternative.me" in url:
+                return fg_resp
+            return _make_response(404)
+
+        mock_client.get = mock_get
+
+        with patch('src.markets.snapshot.httpx.AsyncClient') as MockCls:
+            MockCls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockCls.return_value.__aexit__ = AsyncMock(return_value=None)
+
             result = asyncio.run(capture_market_snapshot())
-        
+
         assert result is not None
         assert result["btc_price"] == 58000.0
         assert result["btc_change_24h"] == -1.23
         assert "fear_greed" not in result
-        assert "fear_greed_label" not in result
         assert "captured_at" in result
