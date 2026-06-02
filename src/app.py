@@ -33,6 +33,8 @@ from .api.connections import signals_router
 from .api.digest import router as digest_router
 from .api.principles import router as principles_router
 from .api.resurfacing import router as resurfacing_router
+from .api.briefing import router as briefing_router
+from .api.extraction import router as extraction_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +50,7 @@ def start_scheduler():
     """Start the APScheduler background task scheduler."""
     global scheduler
     from apscheduler.schedulers.background import BackgroundScheduler
-    from .worker.scheduler import poll_all_feeds_job, process_analysis_job, scheduled_resurfacing_job, transcribe_audio_job
+    from .worker.scheduler import poll_all_feeds_job, process_analysis_job, scheduled_resurfacing_job, transcribe_audio_job, extraction_job, monday_briefing_job
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -68,8 +70,16 @@ def start_scheduler():
     scheduler.add_job(scheduled_resurfacing_job, "cron", hour=6, minute=0,
                       id="scheduled_resurfacing", max_instances=1, coalesce=True)
 
+    # Extraction engine every 30 minutes
+    scheduler.add_job(extraction_job, "interval", minutes=30, start_date="2000-01-01 00:15:00",
+                      id="extraction_engine", max_instances=1, coalesce=True)
+    
+    # Monday briefing every Monday at 10:00 UTC
+    scheduler.add_job(monday_briefing_job, "cron", day_of_week="mon", hour=10, minute=0,
+                      id="monday_briefing", max_instances=1, coalesce=True)
+
     scheduler.start()
-    logger.info("Background scheduler started (poll=5AM, transcription=15min/3items, analysis=15min/20items, resurfacing=6AM)")
+    logger.info("Background scheduler started (poll=5AM, transcription=15min/3items, analysis=15min/20items, resurfacing=6AM, briefing=Mon-10AM)")
 
 
 @asynccontextmanager
@@ -117,6 +127,8 @@ app.include_router(signals_router)
 app.include_router(digest_router)
 app.include_router(principles_router)
 app.include_router(resurfacing_router)
+app.include_router(briefing_router)
+app.include_router(extraction_router)
 
 
 @app.get("/api/health")

@@ -78,6 +78,38 @@ def scheduled_resurfacing_job():
         session.close()
 
 
+def monday_briefing_job():
+    """Generate Monday briefing — runs every Monday at 10:00 UTC."""
+    from ..synthesis.monday_briefing import MondayBriefing
+    
+    session = _get_session()
+    try:
+        briefing = MondayBriefing(session)
+        data = briefing.generate()
+        
+        # Store as a digest
+        from ..db.models import Digest, gen_id
+        from datetime import datetime, timezone, timedelta
+        
+        now = datetime.now(timezone.utc)
+        digest = Digest(
+            digest_id=gen_id(),
+            period_start=now - timedelta(days=7),
+            period_end=now,
+            html_content="",  # Will be rendered by frontend
+            opening=f"Monday Briefing — {data['summary_stats']['total_open']} open predictions, {len(data['due_predictions'])} due soon",
+            raw_data=data,
+        )
+        session.add(digest)
+        session.commit()
+        
+        logger.info(f"Monday briefing generated: {data['summary_stats']}")
+    except Exception as e:
+        logger.error(f"Monday briefing failed: {e}")
+    finally:
+        session.close()
+
+
 def transcribe_audio_job():
     """Transcribe audio items that need transcription."""
     from ..feeds.transcriber import PodcastTranscriber
@@ -113,6 +145,34 @@ def transcribe_audio_job():
                 
     except Exception as e:
         logger.error(f"Transcription job failed: {e}")
+    finally:
+        session.close()
+
+
+def extraction_job():
+    """Extract predictions and frameworks from notes."""
+    from ..analysis.extraction_engine import ExtractionEngine
+    from ..llm.router import LLMRouter
+
+    session = _get_session()
+    try:
+        llm = LLMRouter()
+        engine = ExtractionEngine(llm, session)
+        
+        loop = asyncio.new_event_loop()
+        try:
+            stats = loop.run_until_complete(engine.extract_pending_notes())
+            if stats["notes_processed"] > 0:
+                logger.info(
+                    f"Extraction: {stats['notes_processed']} notes processed, "
+                    f"{stats['predictions_created']} predictions, "
+                    f"{stats['new_frameworks_created']} new frameworks"
+                )
+        finally:
+            loop.close()
+                
+    except Exception as e:
+        logger.error(f"Extraction job failed: {e}")
     finally:
         session.close()
 

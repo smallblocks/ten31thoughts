@@ -140,6 +140,7 @@ class Note(Base):
     source = Column(String, nullable=True)  # "manual" | "timestamp" | "timestamp_synopsis" | "promoted_from_connection" | "promoted_from_signal"
     source_item_id = Column(String, ForeignKey("content_items.item_id"), nullable=True)
     conviction_tier = Column(String, nullable=True)  # "axiom" | "thesis" | "observation" | None
+    market_snapshot = Column(JSON, nullable=True)  # {btc_price, btc_change_24h, fear_greed, fear_greed_label, macro_quadrant, captured_at}
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
@@ -251,6 +252,92 @@ class Digest(Base):
     opening = Column(Text, nullable=True)
     raw_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class Prediction(Base):
+    """Extracted prediction from a note — a falsifiable claim with a timeline."""
+    __tablename__ = "predictions"
+    
+    prediction_id = Column(String, primary_key=True, default=gen_id)
+    note_id = Column(String, ForeignKey("notes.note_id"), nullable=False)
+    
+    claim = Column(Text, nullable=False)  # The actual prediction statement
+    measurable_outcome = Column(Text, nullable=True)  # How to verify it
+    timeline = Column(String, nullable=True)  # e.g. "Q3 2026", "by end of year", "6-12 months"
+    timeline_start = Column(DateTime, nullable=True)  # Parsed start of window
+    timeline_end = Column(DateTime, nullable=True)  # Parsed end of window
+    
+    conviction = Column(Float, nullable=True)  # 0.0-1.0 confidence
+    conviction_reasoning = Column(Text, nullable=True)  # Why this confidence level
+    
+    status = Column(String, default="open")  # open | confirmed | invalidated | expired
+    status_evidence = Column(Text, nullable=True)  # Evidence for status change
+    status_changed_at = Column(DateTime, nullable=True)
+    
+    domain = Column(String, nullable=True)  # fed_policy, bitcoin, geopolitics, etc.
+    tags = Column(JSON, default=list)
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+    
+    note = relationship("Note", backref="predictions")
+    
+    __table_args__ = (
+        Index("idx_prediction_note", "note_id"),
+        Index("idx_prediction_status", "status"),
+        Index("idx_prediction_timeline_end", "timeline_end"),
+        Index("idx_prediction_domain", "domain"),
+    )
+
+
+class Framework(Base):
+    """Named evolving mental model — a first-class intellectual construct."""
+    __tablename__ = "frameworks"
+    
+    framework_id = Column(String, primary_key=True, default=gen_id)
+    name = Column(String(500), nullable=False, unique=True)  # e.g. "Currency Stack", "Digital Industrialization"
+    description = Column(Text, nullable=False)  # Current state of the framework
+    domain = Column(String, nullable=True)
+    
+    evolution_log = Column(JSON, default=list)  # [{date, change, source_note_id, reason}]
+    
+    status = Column(String, default="active")  # active | superseded | merged | archived
+    superseded_by = Column(String, ForeignKey("frameworks.framework_id"), nullable=True)
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+    
+    __table_args__ = (
+        Index("idx_framework_status", "status"),
+        Index("idx_framework_domain", "domain"),
+    )
+
+
+class FrameworkLink(Base):
+    """Link between a framework and a note/prediction."""
+    __tablename__ = "framework_links"
+    
+    link_id = Column(String, primary_key=True, default=gen_id)
+    framework_id = Column(String, ForeignKey("frameworks.framework_id"), nullable=False)
+    note_id = Column(String, ForeignKey("notes.note_id"), nullable=True)
+    prediction_id = Column(String, ForeignKey("predictions.prediction_id"), nullable=True)
+    
+    relation = Column(String, nullable=False)  # "defines" | "extends" | "challenges" | "applies" | "evolves"
+    context = Column(Text, nullable=True)  # Why this link exists
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    framework = relationship("Framework")
+    note = relationship("Note")
+    prediction = relationship("Prediction")
+    
+    __table_args__ = (
+        Index("idx_fwlink_framework", "framework_id"),
+        Index("idx_fwlink_note", "note_id"),
+        Index("idx_fwlink_prediction", "prediction_id"),
+    )
 
 
 class GuestProfile(Base):

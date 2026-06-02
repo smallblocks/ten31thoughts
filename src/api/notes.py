@@ -21,6 +21,7 @@ from ..db.models import Note, ContentItem, Feed, gen_id
 from ..db.session import get_db
 from ..db.vector import VectorStore
 from ..resurfacing.semantic_on_write import fire_semantic_on_write
+from ..markets.snapshot import capture_market_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ class NoteResponse(BaseModel):
     fsrs_state: int
     fsrs_reps: int
     conviction_tier: Optional[str]
+    market_snapshot: Optional[dict]
 
     class Config:
         from_attributes = True
@@ -120,6 +122,7 @@ def note_to_response(note: Note) -> NoteResponse:
         fsrs_state=note.fsrs_state,
         fsrs_reps=note.fsrs_reps,
         conviction_tier=note.conviction_tier,
+        market_snapshot=note.market_snapshot,
     )
 
 
@@ -233,7 +236,7 @@ async def transcribe_audio(audio: UploadFile = File(...)):
 
 
 @router.post("/quick", response_model=QuickNoteResponse, status_code=201)
-def quick_capture(
+async def quick_capture(
     request: QuickNoteRequest,
     session: Session = Depends(get_db),
 ):
@@ -242,11 +245,15 @@ def quick_capture(
     if not body:
         raise HTTPException(status_code=400, detail="Body cannot be empty or whitespace only")
 
+    # Capture market snapshot
+    snapshot = await capture_market_snapshot()
+
     note = Note(
         note_id=gen_id(),
         body=body,
         source="manual",
         archived=False,
+        market_snapshot=snapshot,
     )
     session.add(note)
     session.commit()
@@ -337,7 +344,7 @@ def get_note_echo(note_id: str, session: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=NoteResponse, status_code=201)
-def create_note(
+async def create_note(
     request: CreateNoteRequest,
     session: Session = Depends(get_db),
 ):
@@ -355,6 +362,9 @@ def create_note(
         if request.conviction_tier not in ("axiom", "thesis", "observation"):
             raise HTTPException(status_code=400, detail="conviction_tier must be axiom, thesis, or observation")
 
+    # Capture market snapshot
+    snapshot = await capture_market_snapshot()
+
     note = Note(
         note_id=gen_id(),
         title=title,
@@ -364,6 +374,7 @@ def create_note(
         source_url=request.source_url,
         archived=False,
         conviction_tier=request.conviction_tier,
+        market_snapshot=snapshot,
     )
     session.add(note)
     session.commit()
