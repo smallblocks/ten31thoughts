@@ -16,6 +16,7 @@ alembic==1.13.0
 
 # Vector DB (embedded mode — no separate server)
 chromadb==0.5.0
+numpy<2  # chromadb 0.5.0 uses np.float_ removed in numpy 2.0
 
 # LLM
 litellm==1.48.0
