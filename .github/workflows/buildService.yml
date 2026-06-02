@@ -92,6 +92,11 @@ jobs:
             start-cli init-key
           fi
 
+      - name: Build JavaScript SDK
+        run: |
+          npm ci
+          npm run build
+
       - name: Build the service packages
         id: build
         run: |
